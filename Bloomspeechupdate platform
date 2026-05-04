@@ -1,0 +1,30 @@
+import type { CSSProperties, ReactNode } from 'react'
+
+type SectionCardProps = {
+  title: string
+  children: ReactNode
+}
+
+const cardStyle: CSSProperties = {
+  background: '#ffffff',
+  border: '1px solid #e5e7eb',
+  borderRadius: '22px',
+  padding: '22px',
+  boxShadow: '0 10px 26px rgba(15, 23, 42, 0.04)',
+  marginBottom: '24px',
+}
+
+const titleStyle: CSSProperties = {
+  marginTop: 0,
+  marginBottom: '14px',
+  fontSize: '22px',
+}
+
+export default function SectionCard({ title, children }: SectionCardProps) {
+  return (
+    <div style={cardStyle}>
+      <h2 style={titleStyle}>{title}</h2>
+      {children}
+    </div>
+  )
+}

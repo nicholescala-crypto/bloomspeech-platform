@@ -1,0 +1,38 @@
+import type { CSSProperties } from 'react'
+
+type StatCardProps = {
+  label: string
+  value: string
+  helper: string
+}
+
+const cardStyle: CSSProperties = {
+  background: '#ffffff',
+  border: '1px solid #e5e7eb',
+  borderRadius: '22px',
+  padding: '22px',
+  boxShadow: '0 10px 26px rgba(15, 23, 42, 0.04)',
+}
+
+const labelStyle: CSSProperties = {
+  margin: 0,
+  color: '#6b7280',
+  fontSize: '14px',
+}
+
+const valueStyle: CSSProperties = {
+  fontSize: '34px',
+  fontWeight: 800,
+  margin: '8px 0 6px',
+  color: '#111827',
+}
+
+export default function StatCard({ label, value, helper }: StatCardProps) {
+  return (
+    <div style={cardStyle}>
+      <p style={labelStyle}>{label}</p>
+      <div style={valueStyle}>{value}</div>
+      <p style={labelStyle}>{helper}</p>
+    </div>
+  )
+}
