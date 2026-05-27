@@ -24,6 +24,19 @@ function safeJsonParse(value: string | null, fallback: any) {
 }
 
 function getActiveAssignment(): PracticeAssignment | null {
+  const params = new URLSearchParams(window.location.search);
+  const targetSound = params.get("targetSound");
+  const words = params.get("words");
+
+  if (targetSound || words) {
+    return {
+      id: params.get("assignmentId") || undefined,
+      targetSound: targetSound || undefined,
+      targetPosition: params.get("targetPosition") || undefined,
+      words: words ? words.split(",").filter(Boolean) : [],
+    };
+  }
+
   const possibleKeys = [
     "bloom_active_assignment",
     "activeAssignment",
