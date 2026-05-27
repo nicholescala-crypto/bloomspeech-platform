@@ -259,6 +259,23 @@ export default function ParentDashboardPage() {
               Signed in as: {parentEmail}
             </p>
           )}
+
+          <button
+            onClick={() => { window.location.href = "/rewards"; }}
+            style={{
+              marginTop: 18,
+              border: "none",
+              background: "#f59e0b",
+              color: "white",
+              padding: "12px 20px",
+              borderRadius: 14,
+              cursor: "pointer",
+              fontWeight: 700,
+              fontSize: 16,
+            }}
+          >
+            ⭐ My Rewards Shop
+          </button>
         </section>
 
         {loading && (

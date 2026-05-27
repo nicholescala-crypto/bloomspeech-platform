@@ -2,6 +2,55 @@ import LoginPage from "./pages/LoginPage";
 import ParentDashboardPage from "./pages/ParentDashboardPage";
 import ClinicianDashboardPage from "./pages/ClinicianDashboardPage";
 import PlayPage from "./pages/PlayPage";
+import RewardsShopPage from "./pages/RewardsShopPage";
+
+type UserRole = "parent" | "clinician" | "";
+
+function getCurrentUserRole(): UserRole {
+  try {
+    const raw = localStorage.getItem("currentUser");
+    if (!raw) {
+      return "";
+    }
+
+    const parsed = JSON.parse(raw);
+    if (parsed?.role === "parent" || parsed?.role === "clinician") {
+      return parsed.role;
+    }
+  } catch {
+    // ignore malformed values
+  }
+
+  return "";
+}
+
+function redirectToRolePage(path: string, role: UserRole) {
+  if (role === "parent") {
+    const clinicianPaths = [
+      "/clinician",
+      "/clinician-dashboard",
+      "/clinician-portal",
+      "/clinical",
+      "/clinic",
+    ];
+
+    if (clinicianPaths.includes(path) || path === "/" || path === "/login") {
+      window.location.replace("/parent");
+      return true;
+    }
+  }
+
+  if (role === "clinician") {
+    const parentPaths = ["/parent", "/parent-dashboard", "/parent-portal"];
+
+    if (parentPaths.includes(path) || path === "/" || path === "/login") {
+      window.location.replace("/clinician");
+      return true;
+    }
+  }
+
+  return false;
+}
 
 function NotFoundPage() {
   return (
@@ -20,7 +69,13 @@ function NotFoundPage() {
 }
 
 export default function App() {
-  const path = window.location.pathname.toLowerCase();
+  const rawPath = window.location.pathname.toLowerCase();
+  const path = rawPath.replace(/\/+$/, "") || "/";
+  const role = getCurrentUserRole();
+
+  if (role && redirectToRolePage(path, role)) {
+    return null;
+  }
 
   if (path === "/" || path === "/login") {
     return <LoginPage />;
@@ -46,6 +101,10 @@ export default function App() {
 
   if (path === "/play" || path === "/practice") {
     return <PlayPage />;
+  }
+
+  if (path === "/rewards" || path === "/shop") {
+    return <RewardsShopPage />;
   }
 
   return <NotFoundPage />;

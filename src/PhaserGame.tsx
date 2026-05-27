@@ -16,9 +16,10 @@ type Card = {
 
 type Props = {
   words: string[];
+  onComplete?: (stars: number) => void;
 };
 
-export default function PhaserGame({ words }: Props) {
+export default function PhaserGame({ words, onComplete }: Props) {
   const gameRef = useRef<Phaser.Game | null>(null);
 
   useEffect(() => {
@@ -193,6 +194,9 @@ export default function PhaserGame({ words }: Props) {
             promptText.setText("Great job! Session complete!");
             feedbackText.setText(`Final score: ${score}/${totalRounds}`);
             locked = true;
+            if (onComplete) {
+              scene.time.delayedCall(800, () => onComplete(score));
+            }
             return;
           }
 
@@ -232,7 +236,7 @@ export default function PhaserGame({ words }: Props) {
       gameRef.current?.destroy(true);
       gameRef.current = null;
     };
-  }, [words]);
+  }, [words, onComplete]);
 
   return (
     <div

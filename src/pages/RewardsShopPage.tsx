@@ -1,27 +1,11 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-
-type Badge = {
-  id: string;
-  name: string;
-  emoji: string;
-  description: string;
-  earnedAt: string;
-};
+import { useState } from "react";
 
 type RewardProgress = {
-  badges: Badge[];
   totalStars: number;
   unlockedItems?: string[];
   selectedRocket?: string;
   selectedBackground?: string;
   selectedAvatar?: string;
-};
-
-type ChildProfile = {
-  id: string;
-  name: string;
-  createdAt: string;
 };
 
 type ShopItem = {
@@ -31,8 +15,6 @@ type ShopItem = {
   type: "rocket" | "background" | "avatar";
   cost: number;
 };
-
-const CHILDREN_KEY = "bloom-child-profiles-v1";
 
 const SHOP_ITEMS: ShopItem[] = [
   { id: "rocket-red", name: "Red Rocket", emoji: "🚀", type: "rocket", cost: 5 },
@@ -56,48 +38,28 @@ function safeParse<T>(key: string, fallback: T): T {
   }
 }
 
-function getRewardKey(childId: string) {
-  return `bloom-rewards-${childId}`;
+function getRewardKey(): string {
+  const email = localStorage.getItem("currentParentEmail") || "guest";
+  return `bloom-rewards-${email}`;
 }
 
-function loadChildren(): ChildProfile[] {
-  return safeParse<ChildProfile[]>(CHILDREN_KEY, [
-    { id: "child-1", name: "Child 1", createdAt: new Date().toLocaleString() },
-  ]);
-}
-
-function loadRewards(childId: string): RewardProgress {
-  return safeParse<RewardProgress>(getRewardKey(childId), {
-    badges: [],
+function loadRewards(): RewardProgress {
+  return safeParse<RewardProgress>(getRewardKey(), {
     totalStars: 0,
     unlockedItems: [],
-    selectedRocket: "rocket-red",
-    selectedBackground: "bg-moon",
-    selectedAvatar: "avatar-cat",
+    selectedRocket: undefined,
+    selectedBackground: undefined,
+    selectedAvatar: undefined,
   });
 }
 
 export default function RewardsShopPage() {
-  const navigate = useNavigate();
-  const children = useMemo(() => loadChildren(), []);
-  const [selectedChildId, setSelectedChildId] = useState(children[0]?.id ?? "");
   const [message, setMessage] = useState("");
-
-  const selectedChild = children.find((c) => c.id === selectedChildId) ?? children[0];
-  const [rewards, setRewards] = useState<RewardProgress>(() =>
-    selectedChild ? loadRewards(selectedChild.id) : { badges: [], totalStars: 0, unlockedItems: [] },
-  );
-
-  function switchChild(childId: string) {
-    setSelectedChildId(childId);
-    setRewards(loadRewards(childId));
-    setMessage("");
-  }
+  const [rewards, setRewards] = useState<RewardProgress>(() => loadRewards());
 
   function save(nextRewards: RewardProgress) {
-    if (!selectedChild) return;
     setRewards(nextRewards);
-    localStorage.setItem(getRewardKey(selectedChild.id), JSON.stringify(nextRewards));
+    localStorage.setItem(getRewardKey(), JSON.stringify(nextRewards));
   }
 
   function buyItem(item: ShopItem) {
@@ -155,41 +117,22 @@ export default function RewardsShopPage() {
         <h1>🏪 Reward Shop</h1>
 
 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 24 }}>
-  <button onClick={() => navigate("/parent")} style={navButton}>
+  <button onClick={() => window.location.href = "/parent"} style={navButton}>
     Parent Dashboard
   </button>
 
-  <button onClick={() => navigate("/clinician")} style={navButton}>
+  <button onClick={() => window.location.href = "/clinician"} style={navButton}>
     Clinician Dashboard
   </button>
 
-  <button onClick={() => navigate("/play")} style={navButton}>
+  <button onClick={() => window.location.href = "/parent"} style={navButton}>
     Play Game
   </button>
 </div>
 
-        <button onClick={() => navigate("/parent")} style={smallButton}>
+        <button onClick={() => { window.location.href = "/parent"; }} style={smallButton}>
           Back to Parent Dashboard
         </button>
-
-        <h2>Choose Child</h2>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {children.map((child) => (
-            <button
-              key={child.id}
-              onClick={() => switchChild(child.id)}
-              style={{
-                ...childButton,
-                border:
-                  selectedChildId === child.id
-                    ? "3px solid #2563eb"
-                    : "1px solid #d1d5db",
-              }}
-            >
-              {child.name}
-            </button>
-          ))}
-        </div>
 
         <div style={starsBox}>
           <div style={{ fontSize: 18 }}>Stars Available</div>
@@ -225,20 +168,6 @@ export default function RewardsShopPage() {
           isEquipped={isEquipped}
         />
 
-        <h2>Badges</h2>
-        {rewards.badges.length === 0 ? (
-          <p>No badges yet.</p>
-        ) : (
-          <div style={gridStyle}>
-            {rewards.badges.map((badge) => (
-              <div key={badge.id} style={cardStyle}>
-                <div style={{ fontSize: 42 }}>{badge.emoji}</div>
-                <strong>{badge.name}</strong>
-                <p>{badge.description}</p>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -323,13 +252,6 @@ const starsBox: React.CSSProperties = {
   borderRadius: 18,
   background: "#fef3c7",
   border: "1px solid #facc15",
-};
-
-const childButton: React.CSSProperties = {
-  padding: "10px 14px",
-  borderRadius: 12,
-  background: "white",
-  cursor: "pointer",
 };
 
 const buyButton: React.CSSProperties = {

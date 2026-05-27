@@ -1,4 +1,6 @@
+import { useState } from "react";
 import PhaserGame from "../PhaserGame";
+import RewardUnlockModal from "../components/RewardUnlockModal";
 
 function getWordsFromUrl(): string[] {
   const params = new URLSearchParams(window.location.search);
@@ -12,9 +14,29 @@ function getTargetSoundFromUrl(): string {
   return params.get("targetSound") || "";
 }
 
+function addStars(earned: number) {
+  const email = localStorage.getItem("currentParentEmail") || "guest";
+  const key = `bloom-rewards-${email}`;
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) || "null") ?? {};
+    const next = { ...saved, totalStars: (saved.totalStars ?? 0) + earned };
+    localStorage.setItem(key, JSON.stringify(next));
+  } catch {
+    // ignore
+  }
+}
+
 export default function PlayPage() {
   const words = getWordsFromUrl();
   const targetSound = getTargetSoundFromUrl();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [starsEarned, setStarsEarned] = useState(0);
+
+  function handleSessionComplete(stars: number) {
+    addStars(stars);
+    setStarsEarned(stars);
+    setModalOpen(true);
+  }
 
   if (words.length < 2) {
     return (
@@ -73,6 +95,12 @@ export default function PlayPage() {
         fontFamily: "Arial, sans-serif",
       }}
     >
+      <RewardUnlockModal
+        open={modalOpen}
+        coinsEarned={starsEarned}
+        onClose={() => { window.location.href = "/rewards"; }}
+      />
+
       <div style={{ maxWidth: 900, margin: "0 auto" }}>
         <header
           style={{
@@ -94,7 +122,7 @@ export default function PlayPage() {
           )}
         </header>
 
-        <PhaserGame words={words} />
+        <PhaserGame words={words} onComplete={handleSessionComplete} />
 
         <div style={{ textAlign: "center", marginTop: 20 }}>
           <button
