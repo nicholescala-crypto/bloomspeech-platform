@@ -1,49 +1,70 @@
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "../lib/supabase";
 
 type ChildProfile = {
   id: string;
-  name: string;
-  parentName?: string;
+  child_name?: string;
+  name?: string;
+  childName?: string;
+  parent_email?: string;
   parentEmail?: string;
   email?: string;
+  clinician_email?: string;
+  created_at?: string;
 };
 
 type PracticeAssignment = {
   id: string;
-  childId?: string;
   child_id?: string;
+  childId?: string;
+  child_name?: string;
   childName?: string;
+  parent_email?: string;
+  clinician_email?: string;
+  target_sound?: string;
   targetSound?: string;
+  target_position?: string;
   targetPosition?: string;
   difficulty?: string;
   words?: string[];
   selectedWords?: string[];
+  selected_words?: string[];
+  clinician_note?: string;
   clinicianNote?: string;
-  note?: string;
+  custom_word?: string;
+  customWord?: string;
+  created_at?: string;
+  createdAt?: string;
 };
 
-const CHILDREN_STORAGE_KEY = "bloom_children";
-const ASSIGNMENT_STORAGE_KEY = "bloom_assignments";
-
-function safeJsonParse(value: string | null, fallback: any) {
+function safeJsonParse<T>(value: string | null, fallback: T): T {
   try {
     if (!value) return fallback;
-    return JSON.parse(value);
+    return JSON.parse(value) as T;
   } catch {
     return fallback;
   }
 }
 
 function getCurrentParentEmail() {
-  const directEmail = localStorage.getItem("currentParentEmail");
+  const params = new URLSearchParams(window.location.search);
+  const directEmail = params.get("email");
 
   if (directEmail && directEmail.includes("@")) {
     return directEmail.trim().toLowerCase();
   }
 
-  const currentUser = safeJsonParse(localStorage.getItem("currentUser"), null);
+  const savedParentEmail = localStorage.getItem("currentParentEmail");
+  if (savedParentEmail && savedParentEmail.includes("@")) {
+    return savedParentEmail.trim().toLowerCase();
+  }
 
-  if (currentUser && currentUser.email) {
+  const currentUser = safeJsonParse<{ email?: string; role?: string }>(
+    localStorage.getItem("currentUser"),
+    {}
+  );
+
+  if (currentUser && currentUser.email && currentUser.role === "parent") {
     return String(currentUser.email).trim().toLowerCase();
   }
 
@@ -54,28 +75,101 @@ export default function ParentDashboardPage() {
   const [children, setChildren] = useState<ChildProfile[]>([]);
   const [assignments, setAssignments] = useState<PracticeAssignment[]>([]);
   const [parentEmail, setParentEmail] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedChildren = safeJsonParse(
-      localStorage.getItem(CHILDREN_STORAGE_KEY),
-      []
-    );
+    async function loadParentData() {
+      setLoading(true);
 
-    const savedAssignments = safeJsonParse(
-      localStorage.getItem(ASSIGNMENT_STORAGE_KEY),
-      []
-    );
+      const email = getCurrentParentEmail();
+      setParentEmail(email);
 
-    setChildren(savedChildren);
-    setAssignments(savedAssignments);
-    setParentEmail(getCurrentParentEmail());
+      if (!email) {
+        setChildren([]);
+        setAssignments([]);
+        setLoading(false);
+        return;
+      }
+
+      const { data: childrenData, error: childrenError } = await supabase
+        .from("children")
+        .select("*")
+        .eq("parent_email", email)
+        .order("created_at", { ascending: false });
+
+      console.log("Parent email searched:", email);
+      console.log("Children returned:", childrenData);
+      console.log("Children error:", childrenError);
+
+      const loadedChildren = childrenData || [];
+      setChildren(loadedChildren);
+
+      const childIds = loadedChildren.map((child) => child.id);
+
+      let loadedAssignments: PracticeAssignment[] = [];
+
+      if (childIds.length > 0) {
+        const { data: assignmentData, error: assignmentError } = await supabase
+          .from("assignments")
+          .select("*")
+          .in("child_id", childIds)
+          .order("created_at", { ascending: false });
+
+        console.log("Child IDs searched:", childIds);
+        console.log("Assignments returned by child_id:", assignmentData);
+        console.log("Assignments error:", assignmentError);
+
+        loadedAssignments = assignmentData || [];
+      } else {
+        const { data: assignmentData, error: assignmentError } = await supabase
+          .from("assignments")
+          .select("*")
+          .eq("parent_email", email)
+          .order("created_at", { ascending: false });
+
+        console.log("Fallback parent email searched:", email);
+        console.log("Assignments returned by parent_email:", assignmentData);
+        console.log("Assignments error:", assignmentError);
+
+        loadedAssignments = assignmentData || [];
+
+        if (loadedAssignments.length > 0) {
+          const fallbackChildren: ChildProfile[] = loadedAssignments.map(
+            (assignment) => ({
+              id: assignment.child_id || assignment.id,
+              child_name:
+                assignment.child_name ||
+                assignment.childName ||
+                "Linked child",
+              parent_email: assignment.parent_email || email,
+              clinician_email: assignment.clinician_email,
+              created_at: assignment.created_at || assignment.createdAt,
+            })
+          );
+
+          const uniqueChildren = fallbackChildren.filter(
+            (child, index, array) =>
+              array.findIndex((item) => item.id === child.id) === index
+          );
+
+          setChildren(uniqueChildren);
+        }
+      }
+
+      setAssignments(loadedAssignments);
+      setLoading(false);
+    }
+
+    loadParentData();
   }, []);
 
   const parentChildren = useMemo(() => {
     if (!parentEmail) return [];
 
     return children.filter((child) => {
-      const childEmail = String(child.parentEmail || child.email || "")
+      const childEmail = String(
+        child.parent_email || child.parentEmail || child.email || ""
+      )
         .trim()
         .toLowerCase();
 
@@ -83,93 +177,110 @@ export default function ParentDashboardPage() {
     });
   }, [children, parentEmail]);
 
-  const visibleAssignments = useMemo(() => {
-    const childIds = parentChildren.map((child) => child.id);
-    const childNames = parentChildren.map((child) =>
-      child.name.trim().toLowerCase()
-    );
+  const parentChildIds = useMemo(() => {
+    return parentChildren.map((child) => child.id);
+  }, [parentChildren]);
+
+  const parentAssignments = useMemo(() => {
+    if (assignments.length === 0) return [];
 
     return assignments.filter((assignment) => {
-      const assignmentChildId = assignment.childId || assignment.child_id;
+      const assignmentChildId = String(
+        assignment.child_id || assignment.childId || ""
+      );
 
-      if (assignmentChildId && childIds.includes(assignmentChildId)) {
-        return true;
-      }
-
-      const assignmentChildName = String(assignment.childName || "")
+      const assignmentParentEmail = String(assignment.parent_email || "")
         .trim()
         .toLowerCase();
 
-      return childNames.includes(assignmentChildName);
+      return (
+        parentChildIds.includes(assignmentChildId) ||
+        assignmentParentEmail === parentEmail
+      );
     });
-  }, [assignments, parentChildren]);
-
-  function goToLogin() {
-    window.location.href = "/";
-  }
-
-  function startPractice(assignment: PracticeAssignment) {
-  localStorage.setItem("bloom_active_assignment", JSON.stringify(assignment));
-  localStorage.setItem("activeAssignment", JSON.stringify(assignment));
-  window.location.href = "/play";
-}
+  }, [assignments, parentChildIds, parentEmail]);
 
   return (
     <div
       style={{
         minHeight: "100vh",
-        background: "#f7fbfb",
-        padding: 32,
-        fontFamily: "Arial, sans-serif",
+        background: "#f6fbfb",
+        padding: "48px 20px",
+        fontFamily:
+          '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        color: "#163b3f",
       }}
     >
-      <div style={{ maxWidth: 1000, margin: "0 auto" }}>
-        <div
+      <div
+        style={{
+          maxWidth: 900,
+          margin: "0 auto",
+        }}
+      >
+        <section
           style={{
             background: "white",
-            padding: 28,
+            padding: 32,
             borderRadius: 24,
             boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
             marginBottom: 24,
           }}
         >
-          <h1 style={{ margin: 0, color: "#163b3f", fontSize: 34 }}>
+          <h1
+            style={{
+              marginTop: 0,
+              marginBottom: 12,
+              fontSize: 34,
+              color: "#163b3f",
+            }}
+          >
             Parent Portal
           </h1>
 
-          <p style={{ color: "#567", fontSize: 18 }}>
-            View your child&apos;s speech homework.
+          <p
+            style={{
+              margin: 0,
+              fontSize: 18,
+              color: "#4f6378",
+            }}
+          >
+            View your child's speech homework.
           </p>
 
-          {parentEmail ? (
-            <p style={{ color: "#789" }}>
-              Signed in as: <strong>{parentEmail}</strong>
-            </p>
-          ) : (
-            <button
-              onClick={goToLogin}
+          {parentEmail && (
+            <p
               style={{
-                padding: "12px 18px",
-                borderRadius: 12,
-                border: "none",
-                background: "#2fb8ae",
-                color: "white",
-                fontWeight: 700,
-                cursor: "pointer",
+                marginTop: 18,
+                marginBottom: 0,
+                color: "#708196",
+                fontWeight: 600,
               }}
             >
-              Go to Login
-            </button>
+              Signed in as: {parentEmail}
+            </p>
           )}
-        </div>
+        </section>
 
-        {!parentEmail && (
-          <div
+        {loading && (
+          <section
+            style={{
+              background: "white",
+              padding: 28,
+              borderRadius: 24,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+            }}
+          >
+            <h2 style={{ marginTop: 0 }}>Loading homework...</h2>
+          </section>
+        )}
+
+        {!loading && !parentEmail && (
+          <section
             style={{
               background: "#fff4e5",
               border: "1px solid #ffd7a3",
-              padding: 22,
-              borderRadius: 18,
+              padding: 28,
+              borderRadius: 24,
               color: "#7a4a00",
             }}
           >
@@ -178,11 +289,29 @@ export default function ParentDashboardPage() {
               Go back to the login page and sign in with the same parent email
               that was added in the clinician dashboard.
             </p>
-          </div>
+
+            <button
+              onClick={() => {
+                window.location.href = "/";
+              }}
+              style={{
+                marginTop: 12,
+                border: "none",
+                background: "#163b3f",
+                color: "white",
+                padding: "12px 18px",
+                borderRadius: 14,
+                cursor: "pointer",
+                fontWeight: 700,
+              }}
+            >
+              Back to Login
+            </button>
+          </section>
         )}
 
-        {parentEmail && parentChildren.length === 0 && (
-          <div
+        {!loading && parentEmail && parentChildren.length === 0 && (
+          <section
             style={{
               background: "white",
               padding: 28,
@@ -190,159 +319,226 @@ export default function ParentDashboardPage() {
               boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
             }}
           >
-            <h2 style={{ color: "#163b3f", marginTop: 0 }}>
+            <h2
+              style={{
+                color: "#163b3f",
+                marginTop: 0,
+              }}
+            >
               No child linked yet
             </h2>
 
-            <p style={{ color: "#567", fontSize: 17 }}>
+            <p
+              style={{
+                color: "#4f6378",
+                fontSize: 16,
+              }}
+            >
               A clinician needs to add a child profile using this parent email:
             </p>
 
             <div
               style={{
-                background: "#eef8f7",
-                padding: 14,
+                background: "#eefafa",
+                padding: "14px 16px",
                 borderRadius: 12,
-                color: "#163b3f",
                 fontWeight: 700,
+                color: "#163b3f",
               }}
             >
               {parentEmail}
             </div>
-          </div>
+          </section>
         )}
 
-        {parentChildren.length > 0 && (
-          <div
-            style={{
-              background: "white",
-              padding: 28,
-              borderRadius: 24,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-              marginBottom: 24,
-            }}
-          >
-            <h2 style={{ color: "#163b3f", marginTop: 0 }}>My Child</h2>
+        {!loading && parentChildren.length > 0 && (
+          <>
+            <section
+              style={{
+                background: "white",
+                padding: 28,
+                borderRadius: 24,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+                marginBottom: 24,
+              }}
+            >
+              <h2
+                style={{
+                  marginTop: 0,
+                  color: "#163b3f",
+                }}
+              >
+                Linked Child
+              </h2>
 
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               {parentChildren.map((child) => (
-                <span
+                <div
                   key={child.id}
                   style={{
-                    background: "#eef8f7",
-                    padding: "10px 14px",
-                    borderRadius: 999,
-                    color: "#163b3f",
+                    background: "#eefafa",
+                    padding: 16,
+                    borderRadius: 14,
+                    marginTop: 12,
                     fontWeight: 700,
                   }}
                 >
-                  {child.name}
-                </span>
+                  {child.child_name ||
+                    child.name ||
+                    child.childName ||
+                    "Unnamed child"}
+                </div>
               ))}
-            </div>
-          </div>
-        )}
+            </section>
 
-        {parentChildren.length > 0 && visibleAssignments.length === 0 && (
-          <div
-            style={{
-              background: "white",
-              padding: 28,
-              borderRadius: 24,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-            }}
-          >
-            <h2 style={{ color: "#163b3f", marginTop: 0 }}>
-              No homework assigned yet
-            </h2>
-
-            <p style={{ color: "#567", fontSize: 17 }}>
-              When the clinician assigns homework to your child, it will appear
-              here.
-            </p>
-          </div>
-        )}
-
-        {visibleAssignments.length > 0 && (
-          <div>
-            <h2 style={{ color: "#163b3f" }}>Homework Assignments</h2>
-
-            <div
+            <section
               style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                gap: 18,
+                background: "white",
+                padding: 28,
+                borderRadius: 24,
+                boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
               }}
             >
-              {visibleAssignments.map((assignment) => {
-                const words = assignment.words || assignment.selectedWords || [];
+              <h2
+                style={{
+                  marginTop: 0,
+                  color: "#163b3f",
+                }}
+              >
+                Speech Homework
+              </h2>
+
+              {parentAssignments.length === 0 && (
+                <p
+                  style={{
+                    color: "#4f6378",
+                    fontSize: 16,
+                  }}
+                >
+                  No assignments have been posted yet.
+                </p>
+              )}
+
+              {parentAssignments.map((assignment) => {
+                const words =
+                  assignment.words ||
+                  assignment.selectedWords ||
+                  assignment.selected_words ||
+                  [];
 
                 return (
                   <div
                     key={assignment.id}
                     style={{
-                      background: "white",
-                      padding: 24,
-                      borderRadius: 22,
-                      boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+                      border: "1px solid #e3eeee",
+                      borderRadius: 18,
+                      padding: 20,
+                      marginTop: 16,
+                      background: "#fbffff",
                     }}
                   >
-                    <h3 style={{ color: "#163b3f", marginTop: 0 }}>
-                      {assignment.targetSound
-                        ? `Practice ${assignment.targetSound}`
-                        : "Speech Practice"}
-                    </h3>
-
-                    {assignment.childName && (
-                      <p style={{ color: "#567" }}>
-                        <strong>Child:</strong> {assignment.childName}
-                      </p>
-                    )}
-
-                    {assignment.targetPosition && (
-                      <p style={{ color: "#567" }}>
-                        <strong>Position:</strong>{" "}
-                        {assignment.targetPosition}
-                      </p>
-                    )}
-
-                    {assignment.difficulty && (
-                      <p style={{ color: "#567" }}>
-                        <strong>Difficulty:</strong> {assignment.difficulty}
-                      </p>
-                    )}
-
-                    <p style={{ color: "#567" }}>
-                      <strong>Words:</strong>{" "}
-                      {words.length > 0 ? words.join(", ") : "No words listed"}
-                    </p>
-
-                    <p style={{ color: "#567" }}>
-                      <strong>Note:</strong>{" "}
-                      {assignment.clinicianNote || assignment.note || "No note"}
-                    </p>
-
-                    <button
-                      onClick={() => startPractice(assignment)}
+                    <h3
                       style={{
-                        width: "100%",
-                        padding: "14px 18px",
-                        borderRadius: 14,
-                        border: "none",
-                        background: "#22c55e",
-                        color: "white",
-                        fontSize: 16,
-                        fontWeight: 800,
-                        cursor: "pointer",
+                        marginTop: 0,
+                        marginBottom: 10,
+                        color: "#163b3f",
                       }}
                     >
-                      Start Practice
+                      {assignment.child_name ||
+                        assignment.childName ||
+                        "Practice"}
+                    </h3>
+
+                    <p>
+                      <strong>Sound:</strong>{" "}
+                      {assignment.target_sound ||
+                        assignment.targetSound ||
+                        "Not specified"}
+                    </p>
+
+                    <p>
+                      <strong>Position:</strong>{" "}
+                      {assignment.target_position ||
+                        assignment.targetPosition ||
+                        "Not specified"}
+                    </p>
+
+                    <p>
+                      <strong>Difficulty:</strong>{" "}
+                      {assignment.difficulty || "Not specified"}
+                    </p>
+
+                    {(assignment.custom_word || assignment.customWord) && (
+                      <p>
+                        <strong>Custom word:</strong>{" "}
+                        {assignment.custom_word || assignment.customWord}
+                      </p>
+                    )}
+
+                    {words.length > 0 && (
+                      <div>
+                        <strong>Words:</strong>
+                        <ul>
+                          {words.map((word) => (
+                            <li key={word}>{word}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {(assignment.clinician_note ||
+                      assignment.clinicianNote) && (
+                      <p>
+                        <strong>Clinician note:</strong>{" "}
+                        {assignment.clinician_note ||
+                          assignment.clinicianNote}
+                      </p>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        const targetSound =
+                          assignment.target_sound ||
+                          assignment.targetSound ||
+                          "k";
+
+                        const targetPosition =
+                          assignment.target_position ||
+                          assignment.targetPosition ||
+                          "Initial";
+
+                        const assignmentWords =
+                          assignment.words ||
+                          assignment.selectedWords ||
+                          assignment.selected_words ||
+                          [];
+
+                        const params = new URLSearchParams({
+                          assignmentId: assignment.id,
+                          targetSound,
+                          targetPosition,
+                          words: assignmentWords.join(","),
+                        });
+
+                        window.location.href = `/play?${params.toString()}`;
+                      }}
+                      style={{
+                        marginTop: 16,
+                        border: "none",
+                        background: "#163b3f",
+                        color: "white",
+                        padding: "12px 18px",
+                        borderRadius: 14,
+                        cursor: "pointer",
+                        fontWeight: 700,
+                      }}
+                    >
+                      Play Practice Game
                     </button>
                   </div>
                 );
               })}
-            </div>
-          </div>
+            </section>
+          </>
         )}
       </div>
     </div>
