@@ -1,71 +1,22 @@
-import { useEffect, useState } from "react";
+import PhaserGame from "../PhaserGame";
 
-type PracticeAssignment = {
-  id?: string;
-  childId?: string;
-  childName?: string;
-  parentEmail?: string;
-  targetSound?: string;
-  targetPosition?: string;
-  difficulty?: string;
-  words?: string[];
-  selectedWords?: string[];
-  clinicianNote?: string;
-  note?: string;
-};
-
-function safeJsonParse(value: string | null, fallback: any) {
-  try {
-    if (!value) return fallback;
-    return JSON.parse(value);
-  } catch {
-    return fallback;
-  }
+function getWordsFromUrl(): string[] {
+  const params = new URLSearchParams(window.location.search);
+  const raw = params.get("words");
+  if (!raw) return [];
+  return raw.split(",").map((w) => w.trim().toLowerCase()).filter(Boolean);
 }
 
-function getActiveAssignment(): PracticeAssignment | null {
+function getTargetSoundFromUrl(): string {
   const params = new URLSearchParams(window.location.search);
-  const targetSound = params.get("targetSound");
-  const words = params.get("words");
-
-  if (targetSound || words) {
-    return {
-      id: params.get("assignmentId") || undefined,
-      targetSound: targetSound || undefined,
-      targetPosition: params.get("targetPosition") || undefined,
-      words: words ? words.split(",").filter(Boolean) : [],
-    };
-  }
-
-  const possibleKeys = [
-    "bloom_active_assignment",
-    "activeAssignment",
-    "currentAssignment",
-    "selectedAssignment",
-  ];
-
-  for (const key of possibleKeys) {
-    const assignment = safeJsonParse(localStorage.getItem(key), null);
-
-    if (assignment) {
-      return assignment;
-    }
-  }
-
-  return null;
+  return params.get("targetSound") || "";
 }
 
 export default function PlayPage() {
-  const [assignment, setAssignment] = useState<PracticeAssignment | null>(null);
-  const [currentWordIndex, setCurrentWordIndex] = useState(0);
-  const [practiceCount, setPracticeCount] = useState(0);
+  const words = getWordsFromUrl();
+  const targetSound = getTargetSoundFromUrl();
 
-  useEffect(() => {
-    const savedAssignment = getActiveAssignment();
-    setAssignment(savedAssignment);
-  }, []);
-
-  if (!assignment) {
+  if (words.length < 2) {
     return (
       <div
         style={{
@@ -89,16 +40,12 @@ export default function PlayPage() {
           }}
         >
           <h1 style={{ color: "#163b3f" }}>No assignment found</h1>
-
           <p style={{ color: "#567", fontSize: 18 }}>
-            Go back to the parent dashboard and click Start Practice from a
+            Go back to the parent dashboard and click Play Practice Game from a
             homework card.
           </p>
-
           <button
-            onClick={() => {
-              window.location.href = "/parent";
-            }}
+            onClick={() => { window.location.href = "/parent"; }}
             style={{
               padding: "14px 20px",
               borderRadius: 14,
@@ -117,25 +64,6 @@ export default function PlayPage() {
     );
   }
 
-  const words = assignment.words || assignment.selectedWords || [];
-  const currentWord = words[currentWordIndex] || "Practice";
-
-  function nextWord() {
-    if (words.length === 0) return;
-
-    setPracticeCount(practiceCount + 1);
-
-    if (currentWordIndex < words.length - 1) {
-      setCurrentWordIndex(currentWordIndex + 1);
-    } else {
-      setCurrentWordIndex(0);
-    }
-  }
-
-  function goBack() {
-    window.location.href = "/parent";
-  }
-
   return (
     <div
       style={{
@@ -149,109 +77,31 @@ export default function PlayPage() {
         <header
           style={{
             background: "white",
-            padding: 28,
+            padding: 24,
             borderRadius: 24,
             boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
             marginBottom: 24,
             textAlign: "center",
           }}
         >
-          <h1 style={{ margin: 0, color: "#163b3f", fontSize: 36 }}>
-            Speech Practice
+          <h1 style={{ margin: 0, color: "#163b3f", fontSize: 32 }}>
+            Speech Practice Game
           </h1>
-
-          {assignment.childName && (
-            <p style={{ color: "#567", fontSize: 18 }}>
-              Practicing with <strong>{assignment.childName}</strong>
-            </p>
-          )}
-
-          {assignment.targetSound && (
-            <p style={{ color: "#567", fontSize: 18 }}>
-              Target sound: <strong>{assignment.targetSound}</strong>
+          {targetSound && (
+            <p style={{ color: "#567", fontSize: 18, margin: "8px 0 0" }}>
+              Practicing: <strong>{targetSound}</strong>
             </p>
           )}
         </header>
 
-        <main
-          style={{
-            background: "white",
-            padding: 40,
-            borderRadius: 28,
-            boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-            textAlign: "center",
-          }}
-        >
-          <p
-            style={{
-              color: "#789",
-              fontSize: 18,
-              marginTop: 0,
-            }}
-          >
-            Word {words.length > 0 ? currentWordIndex + 1 : 0} of{" "}
-            {words.length}
-          </p>
+        <PhaserGame words={words} />
 
-          <div
-            style={{
-              background: "#eef8f7",
-              borderRadius: 28,
-              padding: "60px 20px",
-              marginBottom: 28,
-            }}
-          >
-            <h2
-              style={{
-                margin: 0,
-                color: "#163b3f",
-                fontSize: 64,
-                textTransform: "capitalize",
-              }}
-            >
-              {currentWord}
-            </h2>
-          </div>
-
-          {assignment.clinicianNote && (
-            <div
-              style={{
-                background: "#fff8e7",
-                padding: 18,
-                borderRadius: 16,
-                marginBottom: 24,
-                color: "#7a4a00",
-                textAlign: "left",
-              }}
-            >
-              <strong>Clinician note:</strong> {assignment.clinicianNote}
-            </div>
-          )}
-
+        <div style={{ textAlign: "center", marginTop: 20 }}>
           <button
-            onClick={nextWord}
+            onClick={() => { window.location.href = "/parent"; }}
             style={{
-              width: "100%",
-              padding: "18px 22px",
-              borderRadius: 18,
-              border: "none",
-              background: "#22c55e",
-              color: "white",
-              fontSize: 22,
-              fontWeight: 900,
-              cursor: "pointer",
-              marginBottom: 14,
-            }}
-          >
-            I Practiced This Word
-          </button>
-
-          <button
-            onClick={goBack}
-            style={{
-              width: "100%",
-              padding: "14px 18px",
-              borderRadius: 16,
+              padding: "14px 24px",
+              borderRadius: 14,
               border: "none",
               background: "#2fb8ae",
               color: "white",
@@ -262,11 +112,7 @@ export default function PlayPage() {
           >
             Back to Parent Dashboard
           </button>
-
-          <p style={{ color: "#789", marginTop: 18 }}>
-            Practice count: <strong>{practiceCount}</strong>
-          </p>
-        </main>
+        </div>
       </div>
     </div>
   );

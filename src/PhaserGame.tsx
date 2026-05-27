@@ -14,24 +14,28 @@ type Card = {
   item: Item | null;
 };
 
-export default function PhaserGame() {
+type Props = {
+  words: string[];
+};
+
+export default function PhaserGame({ words }: Props) {
   const gameRef = useRef<Phaser.Game | null>(null);
 
   useEffect(() => {
     if (gameRef.current) return;
 
-    const items: Item[] = [
-      { key: "sun", sound: "sunSound" },
-      { key: "ball", sound: "ballSound" },
-      { key: "cat", sound: "catSound" },
-      { key: "dog", sound: "dogSound" },
-    ];
+    const items: Item[] = words.map((word) => ({
+      key: word.toLowerCase(),
+      sound: word.toLowerCase() + "Sound",
+    }));
+
+    const cardCount = Math.min(items.length, 4);
 
     let currentChoices: Item[] = [];
     let currentTarget: Item | null = null;
     let score = 0;
     let round = 1;
-    const totalRounds = 5;
+    const totalRounds = Math.min(10, items.length * 2);
     let locked = false;
 
     let promptText!: Phaser.GameObjects.Text;
@@ -41,15 +45,10 @@ export default function PhaserGame() {
     const cards: Card[] = [];
 
     function preload(this: Phaser.Scene) {
-      this.load.image("sun", "/Images/sun.png");
-      this.load.image("ball", "/Images/ball.png");
-      this.load.image("cat", "/Images/cat.png");
-      this.load.image("dog", "/Images/dog.png");
-
-      this.load.audio("sunSound", "/audio/sun.mp3");
-      this.load.audio("ballSound", "/audio/ball.mp3");
-      this.load.audio("catSound", "/audio/cat.mp3");
-      this.load.audio("dogSound", "/audio/dog.mp3");
+      items.forEach((item) => {
+        this.load.image(item.key, `/Images/${item.key}.png`);
+        this.load.audio(item.sound, `/audio/${item.key}.mp3`);
+      });
     }
 
     function create(this: Phaser.Scene) {
@@ -87,12 +86,14 @@ export default function PhaserGame() {
         })
         .setOrigin(0.5);
 
-      const positions = [
+      const allPositions = [
         { x: 220, y: 280 },
         { x: 580, y: 280 },
         { x: 220, y: 470 },
         { x: 580, y: 470 },
       ];
+
+      const positions = allPositions.slice(0, cardCount);
 
       positions.forEach((pos) => {
         const frame = this.add
@@ -100,16 +101,10 @@ export default function PhaserGame() {
           .setStrokeStyle(4, 0x94a3b8);
 
         const image = this.add
-          .image(pos.x, pos.y, "sun")
+          .image(pos.x, pos.y, items[0].key)
           .setDisplaySize(120, 120);
 
-        cards.push({
-          frame,
-          image,
-          x: pos.x,
-          y: pos.y,
-          item: null,
-        });
+        cards.push({ frame, image, x: pos.x, y: pos.y, item: null });
       });
 
       this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
@@ -136,13 +131,21 @@ export default function PhaserGame() {
       locked = false;
       feedbackText.setText("");
 
-      currentChoices = Phaser.Utils.Array.Shuffle([...items]).slice(0, 4);
+      const shuffled = Phaser.Utils.Array.Shuffle([...items]);
+      currentChoices = shuffled.slice(0, cardCount);
       currentTarget = Phaser.Utils.Array.GetRandom(currentChoices);
 
       if (!currentTarget) return;
 
-      promptText.setText(`Round ${round}/${totalRounds} - Find ${currentTarget.key}`);
-      scene.sound.play(currentTarget.sound);
+      promptText.setText(
+        `Round ${round}/${totalRounds} — Tap: "${currentTarget.key}"`
+      );
+
+      try {
+        scene.sound.play(currentTarget.sound);
+      } catch {
+        // audio may not be available for all words
+      }
 
       currentChoices.forEach((item, i) => {
         const card = cards[i];
@@ -158,14 +161,18 @@ export default function PhaserGame() {
     function handleCardClick(scene: Phaser.Scene, card: Card) {
       if (locked || !currentTarget || !card.item) return;
 
-      scene.sound.play(card.item.sound);
+      try {
+        scene.sound.play(card.item.sound);
+      } catch {
+        // audio may not be available
+      }
 
       if (card.item.key === currentTarget.key) {
         locked = true;
         score += 1;
         scoreText.setText(`Score: ${score}`);
         feedbackText.setColor("#16a34a");
-        feedbackText.setText(`Correct! Say: ${currentTarget.key}`);
+        feedbackText.setText(`Correct! Say: "${currentTarget.key}"`);
         card.frame.setStrokeStyle(6, 0x22c55e);
 
         scene.tweens.add({
@@ -179,12 +186,12 @@ export default function PhaserGame() {
           },
         });
 
-        scene.time.delayedCall(1000, () => {
+        scene.time.delayedCall(1200, () => {
           round += 1;
 
           if (round > totalRounds) {
-            promptText.setText("Session complete!");
-            feedbackText.setText(`Final score: ${score}`);
+            promptText.setText("Great job! Session complete!");
+            feedbackText.setText(`Final score: ${score}/${totalRounds}`);
             locked = true;
             return;
           }
@@ -193,7 +200,7 @@ export default function PhaserGame() {
         });
       } else {
         feedbackText.setColor("#dc2626");
-        feedbackText.setText(`Try again. Find ${currentTarget.key}.`);
+        feedbackText.setText(`Try again! Find "${currentTarget.key}".`);
         card.frame.setStrokeStyle(6, 0xef4444);
 
         scene.tweens.add({
@@ -215,13 +222,8 @@ export default function PhaserGame() {
       height: 620,
       parent: "game-container",
       backgroundColor: "#eef7ff",
-      scene: {
-        preload,
-        create,
-      },
-      scale: {
-        mode: Phaser.Scale.NONE,
-      },
+      scene: { preload, create },
+      scale: { mode: Phaser.Scale.NONE },
     };
 
     gameRef.current = new Phaser.Game(config);
@@ -230,7 +232,7 @@ export default function PhaserGame() {
       gameRef.current?.destroy(true);
       gameRef.current = null;
     };
-  }, []);
+  }, [words]);
 
   return (
     <div
@@ -242,6 +244,7 @@ export default function PhaserGame() {
         overflow: "hidden",
         border: "2px solid #cbd5e1",
         background: "#eef7ff",
+        borderRadius: 16,
       }}
     />
   );
