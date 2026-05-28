@@ -2,6 +2,7 @@ import LoginPage from "./pages/LoginPage";
 import ParentDashboardPage from "./pages/ParentDashboardPage";
 import ClinicianDashboardPage from "./pages/ClinicianDashboardPage";
 import PlayPage from "./pages/PlayPage";
+import RewardsShopPage from "./pages/RewardsShopPage";
 
 type UserRole = "parent" | "clinician" | "";
 
@@ -108,6 +109,10 @@ export default function App() {
 
   if (path === "/play" || path === "/practice") {
     return <PlayPage />;
+  }
+
+  if (path === "/rewards" || path === "/shop") {
+    return <RewardsShopPage />;
   }
 
   return <NotFoundPage />;
