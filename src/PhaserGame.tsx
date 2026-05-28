@@ -9,6 +9,7 @@ type Item = {
 type Card = {
   frame: Phaser.GameObjects.Rectangle;
   image: Phaser.GameObjects.Image;
+  label: Phaser.GameObjects.Text;
   x: number;
   y: number;
   item: Item | null;
@@ -102,10 +103,18 @@ export default function PhaserGame({ words, onComplete }: Props) {
           .setStrokeStyle(4, 0x94a3b8);
 
         const image = this.add
-          .image(pos.x, pos.y, items[0].key)
-          .setDisplaySize(120, 120);
+          .image(pos.x, pos.y - 15, items[0].key)
+          .setDisplaySize(110, 110);
 
-        cards.push({ frame, image, x: pos.x, y: pos.y, item: null });
+        const label = this.add
+          .text(pos.x, pos.y + 65, "", {
+            fontSize: "18px",
+            color: "#1f2937",
+            fontStyle: "bold",
+          })
+          .setOrigin(0.5);
+
+        cards.push({ frame, image, label, x: pos.x, y: pos.y, item: null });
       });
 
       this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
@@ -153,9 +162,10 @@ export default function PhaserGame({ words, onComplete }: Props) {
         card.item = item;
         card.frame.setStrokeStyle(4, 0x94a3b8);
         card.image.setTexture(item.key);
-        card.image.setDisplaySize(120, 120);
-        card.image.setPosition(card.x, card.y);
+        card.image.setDisplaySize(110, 110);
+        card.image.setPosition(card.x, card.y - 15);
         card.image.setAngle(0);
+        card.label.setText(item.key);
       });
     }
 
@@ -183,7 +193,7 @@ export default function PhaserGame({ words, onComplete }: Props) {
           duration: 120,
           yoyo: true,
           onComplete: () => {
-            card.image.setDisplaySize(120, 120);
+            card.image.setDisplaySize(110, 110);
           },
         });
 
@@ -214,7 +224,7 @@ export default function PhaserGame({ words, onComplete }: Props) {
           yoyo: true,
           repeat: 3,
           onComplete: () => {
-            card.image.setPosition(card.x, card.y);
+            card.image.setPosition(card.x, card.y - 15);
           },
         });
       }

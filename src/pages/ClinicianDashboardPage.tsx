@@ -23,64 +23,31 @@ type PracticeAssignment = {
 };
 
 const DEFAULT_WORDS = [
-  "cat",
-  "key",
-  "cake",
-  "cow",
-  "cookie",
-  "kite",
-  "king",
-  "coat",
-  "cup",
-  "car",
-  "dog",
-  "go",
-  "gum",
-  "gate",
-  "goat",
-  "girl",
-  "gift",
-  "bug",
-  "frog",
-  "pig",
-  "sun",
-  "soap",
-  "sock",
-  "sand",
-  "seal",
-  "sit",
-  "see",
-  "bus",
-  "mouse",
-  "house",
-  "shoe",
-  "ship",
-  "fish",
-  "wish",
-  "shell",
-  "sheep",
-  "chair",
-  "cheese",
-  "chicken",
-  "teacher",
-  "watch",
-  "thumb",
-  "think",
-  "bath",
-  "tooth",
-  "feather",
-  "weather",
-  "red",
-  "rabbit",
-  "rain",
-  "ring",
-  "carrot",
-  "tiger",
-  "leaf",
-  "lion",
-  "lemon",
-  "ball",
-  "bell",
+  "apple", "bacon", "baking", "ball", "baseball", "bath", "bear", "begging",
+  "bench", "bicycle", "bike", "birthday", "book", "brush", "bug", "bus",
+  "cake", "calm", "can", "car", "carrot", "castle", "cat", "cereal",
+  "champ", "chase", "cheese", "cherry", "chew", "chicken", "child", "chime",
+  "chin", "chomp", "coffee", "cookie", "cool", "cow", "cup", "dinosaur",
+  "dish", "dog", "dollar", "dolphin", "door", "dragon", "dress", "eagle",
+  "earth", "fan", "fashion", "fawn", "feather", "fight", "fin", "fish",
+  "fishing", "fizzy", "flower", "fog", "fossil", "fox", "frog", "gallon",
+  "game", "garage", "gate", "gather", "gaze", "giraffe", "girl", "go",
+  "goat", "golf", "guess", "guitar", "gum", "guy", "hawk", "hike",
+  "horse", "hug", "ice", "icecream", "jelly", "jug", "keep", "key",
+  "kick", "kid", "king", "kiss", "kitchen", "kite", "knife", "lady",
+  "lake", "lamb", "lamp", "like", "lime", "lion", "lock", "loud",
+  "lunch", "lunchbox", "mail", "make", "mash", "melon", "mess", "messy",
+  "mouse", "mouth", "muffin", "mushroom", "music", "ocean", "orange", "owl",
+  "parade", "parrot", "path", "peaches", "pig", "pillow", "pilot", "pirate",
+  "pocket", "porch", "potion", "pug", "rabbit", "racing", "rain", "raincoat",
+  "rake", "reaching", "red", "rice", "robot", "rocket", "roof", "room",
+  "rope", "rose", "rug", "rule", "sad", "sail", "salad", "sand",
+  "saw", "sell", "shadow", "shark", "she", "sheep", "shell", "shiny",
+  "ship", "shirt", "shoe", "show", "shower", "sing", "six", "soap",
+  "soccer", "sock", "soup", "star", "suit", "sun", "teacher", "thigh",
+  "think", "thirteen", "thread", "three", "throne", "thumb", "thunder", "ticket",
+  "tiger", "tissue", "tooth", "toothbrush", "trash", "tugboat", "turtle", "waffle",
+  "wagon", "watching", "weather", "wish", "witch", "wolf", "yellow", "yes",
 ];
 
 function getClinicianEmail() {
@@ -224,7 +191,9 @@ export default function ClinicianDashboardPage() {
     const { error } = await supabase.from("assignments").insert({
       child_id: selectedChild.id,
       child_name: selectedChild.child_name,
-      parent_email: selectedChild.parent_email,
+      parent_email: selectedChild.parent_email
+        ? String(selectedChild.parent_email).trim().toLowerCase()
+        : "",
       clinician_email: clinicianEmail,
       target_sound: targetSound,
       target_position: targetPosition,
@@ -411,17 +380,28 @@ export default function ClinicianDashboardPage() {
                       key={word}
                       onClick={() => toggleWord(word)}
                       style={{
-                        padding: "9px 13px",
-                        borderRadius: 999,
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: 4,
+                        padding: "8px 8px 6px",
+                        borderRadius: 14,
                         border: isSelected
                           ? "2px solid #22c55e"
                           : "1px solid #dbe7e6",
                         background: isSelected ? "#dcfce7" : "#f8fbfb",
                         color: "#163b3f",
                         fontWeight: 700,
+                        fontSize: 13,
                         cursor: "pointer",
+                        width: 90,
                       }}
                     >
+                      <img
+                        src={`/Images/${word}.png`}
+                        alt={word}
+                        style={{ width: 60, height: 60, objectFit: "contain" }}
+                      />
                       {word}
                     </button>
                   );
@@ -558,8 +538,8 @@ const cardGridStyle = {
 };
 
 const wordGridStyle = {
-  display: "flex",
-  flexWrap: "wrap" as const,
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))",
   gap: 8,
   marginBottom: 18,
 };
