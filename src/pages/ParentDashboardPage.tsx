@@ -37,35 +37,43 @@ type PracticeAssignment = {
   createdAt?: string;
 };
 
-function safeJsonParse<T>(value: string | null, fallback: T): T {
-  try {
-    if (!value) return fallback;
-    return JSON.parse(value) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function getCurrentParentEmail() {
+async function getParentEmail(): Promise<string> {
+  // 1. Check URL params first (for testing/sharing links)
   const params = new URLSearchParams(window.location.search);
-  const directEmail = params.get("email");
-
-  if (directEmail && directEmail.includes("@")) {
-    return directEmail.trim().toLowerCase();
+  const urlEmail = params.get("email");
+  if (urlEmail && urlEmail.includes("@")) {
+    return urlEmail.trim().toLowerCase();
   }
 
-  const savedParentEmail = localStorage.getItem("currentParentEmail");
-  if (savedParentEmail && savedParentEmail.includes("@")) {
-    return savedParentEmail.trim().toLowerCase();
+  // 2. Read directly from the live Supabase auth session (most reliable)
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session?.user?.email) {
+      return session.user.email.trim().toLowerCase();
+    }
+  } catch (err) {
+    console.warn("Could not read Supabase session:", err);
   }
 
-  const currentUser = safeJsonParse<{ email?: string; role?: string }>(
-    localStorage.getItem("currentUser"),
-    {}
-  );
+  // 3. Fall back to localStorage currentUser JSON
+  try {
+    const raw = localStorage.getItem("currentUser");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.email && String(parsed.email).includes("@")) {
+        return String(parsed.email).trim().toLowerCase();
+      }
+    }
+  } catch {
+    // ignore parse errors
+  }
 
-  if (currentUser && currentUser.email && currentUser.role === "parent") {
-    return String(currentUser.email).trim().toLowerCase();
+  // 4. Last resort: bare email string in localStorage
+  const storedParentEmail = localStorage.getItem("currentParentEmail");
+  if (storedParentEmail && storedParentEmail.includes("@")) {
+    return storedParentEmail.trim().toLowerCase();
   }
 
   return "";
@@ -81,124 +89,119 @@ export default function ParentDashboardPage() {
     async function loadParentData() {
       setLoading(true);
 
-      const email = getCurrentParentEmail();
+      const email = await getParentEmail();
+
+      console.log("=== PARENT DASHBOARD LOAD START ===");
+      console.log("Resolved email:", email);
+      console.log("localStorage keys:", Object.keys(localStorage));
+      console.log("currentUser raw:", localStorage.getItem("currentUser"));
+      console.log(
+        "currentParentEmail raw:",
+        localStorage.getItem("currentParentEmail")
+      );
+
       setParentEmail(email);
 
       if (!email) {
+        console.warn("No parent email found — cannot load children");
         setChildren([]);
         setAssignments([]);
         setLoading(false);
         return;
       }
 
-      const { data: childrenData, error: childrenError } = await supabase
-        .from("children")
-        .select("*")
-        .eq("parent_email", email)
-        .order("created_at", { ascending: false });
+      try {
+        console.log("Querying children with email:", email);
+        const { data: childrenData, error: childrenError } = await supabase
+          .from("children")
+          .select("*")
+          .ilike("parent_email", email)
+          .order("created_at", { ascending: false });
 
-      console.log("Parent email searched:", email);
-      console.log("Children returned:", childrenData);
-      console.log("Children error:", childrenError);
+        console.log("Children query result:", {
+          data: childrenData,
+          error: childrenError,
+          count: childrenData?.length,
+        });
 
-      const loadedChildren = childrenData || [];
-      setChildren(loadedChildren);
+        if (childrenError) {
+          console.error("Could not load children:", childrenError);
+          setChildren([]);
+          setAssignments([]);
+          setLoading(false);
+          return;
+        }
 
-      const childIds = loadedChildren.map((child) => child.id);
+        const loadedChildren = childrenData || [];
+        setChildren(loadedChildren);
 
-      let loadedAssignments: PracticeAssignment[] = [];
+        const childIds = loadedChildren.map((child) => child.id);
+        console.log("Child IDs for assignment query:", childIds);
 
-      if (childIds.length > 0) {
         const { data: assignmentData, error: assignmentError } = await supabase
           .from("assignments")
           .select("*")
           .in("child_id", childIds)
           .order("created_at", { ascending: false });
 
-        console.log("Child IDs searched:", childIds);
-        console.log("Assignments returned by child_id:", assignmentData);
-        console.log("Assignments error:", assignmentError);
+        if (assignmentError) {
+          console.error("Could not load assignments:", assignmentError);
+          setAssignments([]);
+          setLoading(false);
+          return;
+        }
 
-        loadedAssignments = assignmentData || [];
-      } else {
-        const { data: assignmentData, error: assignmentError } = await supabase
+        const { data: assignmentByParentEmail, error: parentEmailError } = await supabase
           .from("assignments")
           .select("*")
-          .eq("parent_email", email)
+          .ilike("parent_email", email)
           .order("created_at", { ascending: false });
 
-        console.log("Fallback parent email searched:", email);
-        console.log("Assignments returned by parent_email:", assignmentData);
-        console.log("Assignments error:", assignmentError);
-
-        loadedAssignments = assignmentData || [];
-
-        if (loadedAssignments.length > 0) {
-          const fallbackChildren: ChildProfile[] = loadedAssignments.map(
-            (assignment) => ({
-              id: assignment.child_id || assignment.id,
-              child_name:
-                assignment.child_name ||
-                assignment.childName ||
-                "Linked child",
-              parent_email: assignment.parent_email || email,
-              clinician_email: assignment.clinician_email,
-              created_at: assignment.created_at || assignment.createdAt,
-            })
-          );
-
-          const uniqueChildren = fallbackChildren.filter(
-            (child, index, array) =>
-              array.findIndex((item) => item.id === child.id) === index
-          );
-
-          setChildren(uniqueChildren);
+        if (parentEmailError) {
+          console.error("Could not load assignments by parent_email:", parentEmailError);
+          setAssignments(assignmentData || []);
+          setLoading(false);
+          return;
         }
-      }
 
-      setAssignments(loadedAssignments);
-      setLoading(false);
+        console.log("Assignments query result:", {
+          data: assignmentData,
+          count: assignmentData?.length,
+        });
+        console.log("Assignments by parent_email result:", {
+          data: assignmentByParentEmail,
+          count: assignmentByParentEmail?.length,
+        });
+
+        const assignmentMap = new Map<string, PracticeAssignment>();
+
+        (assignmentData || []).forEach((assignment) => {
+          if (assignment.id) {
+            assignmentMap.set(assignment.id, assignment);
+          }
+        });
+
+        (assignmentByParentEmail || []).forEach((assignment) => {
+          if (assignment.id) {
+            assignmentMap.set(assignment.id, assignment);
+          }
+        });
+
+        setAssignments(Array.from(assignmentMap.values()));
+        setLoading(false);
+      } catch (err) {
+        console.error("Unexpected error in loadParentData:", err);
+        setChildren([]);
+        setAssignments([]);
+        setLoading(false);
+      }
     }
 
     loadParentData();
   }, []);
 
-  const parentChildren = useMemo(() => {
-    if (!parentEmail) return [];
-
-    return children.filter((child) => {
-      const childEmail = String(
-        child.parent_email || child.parentEmail || child.email || ""
-      )
-        .trim()
-        .toLowerCase();
-
-      return childEmail === parentEmail;
-    });
-  }, [children, parentEmail]);
-
-  const parentChildIds = useMemo(() => {
-    return parentChildren.map((child) => child.id);
-  }, [parentChildren]);
-
-  const parentAssignments = useMemo(() => {
-    if (assignments.length === 0) return [];
-
-    return assignments.filter((assignment) => {
-      const assignmentChildId = String(
-        assignment.child_id || assignment.childId || ""
-      );
-
-      const assignmentParentEmail = String(assignment.parent_email || "")
-        .trim()
-        .toLowerCase();
-
-      return (
-        parentChildIds.includes(assignmentChildId) ||
-        assignmentParentEmail === parentEmail
-      );
-    });
-  }, [assignments, parentChildIds, parentEmail]);
+  const parentChildren = useMemo(() => children, [children]);
+  const parentAssignments = useMemo(() => assignments, [assignments]);
 
   return (
     <div
@@ -261,20 +264,24 @@ export default function ParentDashboardPage() {
           )}
 
           <button
-            onClick={() => { window.location.href = "/rewards"; }}
+            onClick={() => {
+              localStorage.removeItem("currentUser");
+              localStorage.removeItem("currentParentEmail");
+              window.location.href = "/login";
+            }}
             style={{
-              marginTop: 18,
-              border: "none",
-              background: "#f59e0b",
-              color: "white",
-              padding: "12px 20px",
-              borderRadius: 14,
-              cursor: "pointer",
+              marginTop: 14,
+              padding: "9px 18px",
+              borderRadius: 12,
+              border: "1px solid #dbe7e6",
+              background: "white",
+              color: "#567",
+              fontSize: 14,
               fontWeight: 700,
-              fontSize: 16,
+              cursor: "pointer",
             }}
           >
-            ⭐ My Rewards Shop
+            Sign Out
           </button>
         </section>
 
@@ -327,7 +334,7 @@ export default function ParentDashboardPage() {
           </section>
         )}
 
-        {!loading && parentEmail && parentChildren.length === 0 && (
+        {!loading && parentEmail && parentChildren.length === 0 && parentAssignments.length === 0 && (
           <section
             style={{
               background: "white",
@@ -351,7 +358,18 @@ export default function ParentDashboardPage() {
                 fontSize: 16,
               }}
             >
-              A clinician needs to add a child profile using this parent email:
+              A clinician needs to add a child profile using this parent email.
+            </p>
+
+            <p
+              style={{
+                color: "#a1bede",
+                fontSize: 15,
+                marginTop: 14,
+                marginBottom: 6,
+              }}
+            >
+              Normalized lookup email used for matching:
             </p>
 
             <div
@@ -368,44 +386,46 @@ export default function ParentDashboardPage() {
           </section>
         )}
 
-        {!loading && parentChildren.length > 0 && (
+        {(!loading && (parentChildren.length > 0 || parentAssignments.length > 0)) && (
           <>
-            <section
-              style={{
-                background: "white",
-                padding: 28,
-                borderRadius: 24,
-                boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-                marginBottom: 24,
-              }}
-            >
-              <h2
+            {parentChildren.length > 0 && (
+              <section
                 style={{
-                  marginTop: 0,
-                  color: "#163b3f",
+                  background: "white",
+                  padding: 28,
+                  borderRadius: 24,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+                  marginBottom: 24,
                 }}
               >
-                Linked Child
-              </h2>
-
-              {parentChildren.map((child) => (
-                <div
-                  key={child.id}
+                <h2
                   style={{
-                    background: "#eefafa",
-                    padding: 16,
-                    borderRadius: 14,
-                    marginTop: 12,
-                    fontWeight: 700,
+                    marginTop: 0,
+                    color: "#163b3f",
                   }}
                 >
-                  {child.child_name ||
-                    child.name ||
-                    child.childName ||
-                    "Unnamed child"}
-                </div>
-              ))}
-            </section>
+                  Linked Child
+                </h2>
+
+                {parentChildren.map((child) => (
+                  <div
+                    key={child.id}
+                    style={{
+                      background: "#eefafa",
+                      padding: 16,
+                      borderRadius: 14,
+                      marginTop: 12,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {child.child_name ||
+                      child.name ||
+                      child.childName ||
+                      "Unnamed child"}
+                  </div>
+                ))}
+              </section>
+            )}
 
             <section
               style={{
@@ -423,6 +443,65 @@ export default function ParentDashboardPage() {
               >
                 Speech Homework
               </h2>
+
+              {/* DEBUG INFO */}
+              <div
+                style={{
+                  background: "#f0f0f0",
+                  padding: 12,
+                  borderRadius: 8,
+                  marginBottom: 16,
+                  fontSize: 12,
+                  fontFamily: "monospace",
+                  overflowX: "auto",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-all",
+                }}
+              >
+                <p style={{ marginTop: 0, marginBottom: 4 }}>
+                  parentEmail: "{parentEmail}"
+                </p>
+                <p style={{ marginBottom: 4 }}>
+                  assignments.length: {assignments.length}
+                </p>
+                <p style={{ marginBottom: 4 }}>
+                  children.length: {children.length}
+                </p>
+                <p style={{ marginBottom: 4 }}>
+                  parentChildren.length: {parentChildren.length}
+                </p>
+                {children.length > 0 && (
+                  <p style={{ marginBottom: 4 }}>
+                    First child: id="{children[0].id}" email="
+                    {children[0].parent_email}"
+                  </p>
+                )}
+                {assignments.length > 0 && (
+                  <p style={{ marginBottom: 4 }}>
+                    First assignment: child_id="{assignments[0].child_id}"
+                  </p>
+                )}
+              </div>
+
+              <button
+                onClick={() => {
+                  const testEmail = "nwiltshir@gmail.com";
+                  window.location.href =
+                    `/parent?email=` + encodeURIComponent(testEmail);
+                }}
+                style={{
+                  background: "#999",
+                  color: "white",
+                  padding: "6px 12px",
+                  borderRadius: 6,
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 12,
+                  marginBottom: 16,
+                }}
+              >
+                Test with nwiltshir@gmail.com
+              </button>
 
               {parentAssignments.length === 0 && (
                 <p
@@ -460,17 +539,9 @@ export default function ParentDashboardPage() {
                         color: "#163b3f",
                       }}
                     >
-                      {assignment.child_name ||
-                        assignment.childName ||
-                        "Practice"}
+                      Practice{" "}
+                      {assignment.target_sound || assignment.targetSound || ""}
                     </h3>
-
-                    <p>
-                      <strong>Sound:</strong>{" "}
-                      {assignment.target_sound ||
-                        assignment.targetSound ||
-                        "Not specified"}
-                    </p>
 
                     <p>
                       <strong>Position:</strong>{" "}

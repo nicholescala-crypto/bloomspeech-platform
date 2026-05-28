@@ -2,7 +2,6 @@ import LoginPage from "./pages/LoginPage";
 import ParentDashboardPage from "./pages/ParentDashboardPage";
 import ClinicianDashboardPage from "./pages/ClinicianDashboardPage";
 import PlayPage from "./pages/PlayPage";
-import RewardsShopPage from "./pages/RewardsShopPage";
 
 type UserRole = "parent" | "clinician" | "";
 
@@ -34,7 +33,7 @@ function redirectToRolePage(path: string, role: UserRole) {
       "/clinic",
     ];
 
-    if (clinicianPaths.includes(path) || path === "/" || path === "/login") {
+    if (clinicianPaths.includes(path) || path === "/") {
       window.location.replace("/parent");
       return true;
     }
@@ -101,10 +100,6 @@ export default function App() {
 
   if (path === "/play" || path === "/practice") {
     return <PlayPage />;
-  }
-
-  if (path === "/rewards" || path === "/shop") {
-    return <RewardsShopPage />;
   }
 
   return <NotFoundPage />;
