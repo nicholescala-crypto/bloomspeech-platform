@@ -85,6 +85,10 @@ export default function App() {
     path === "/parent-dashboard" ||
     path === "/parent-portal"
   ) {
+    if (role !== "parent") {
+      window.location.replace("/login");
+      return null;
+    }
     return <ParentDashboardPage />;
   }
 
@@ -95,6 +99,10 @@ export default function App() {
     path === "/clinical" ||
     path === "/clinic"
   ) {
+    if (role !== "clinician") {
+      window.location.replace("/login");
+      return null;
+    }
     return <ClinicianDashboardPage />;
   }
 
