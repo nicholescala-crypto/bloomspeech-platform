@@ -263,26 +263,43 @@ export default function ParentDashboardPage() {
             </p>
           )}
 
-          <button
-            onClick={() => {
-              localStorage.removeItem("currentUser");
-              localStorage.removeItem("currentParentEmail");
-              window.location.href = "/login";
-            }}
-            style={{
-              marginTop: 14,
-              padding: "9px 18px",
-              borderRadius: 12,
-              border: "1px solid #dbe7e6",
-              background: "white",
-              color: "#567",
-              fontSize: 14,
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            Sign Out
-          </button>
+          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+            <button
+              onClick={() => { window.location.href = "/rewards"; }}
+              style={{
+                padding: "9px 18px",
+                borderRadius: 12,
+                border: "none",
+                background: "#163b3f",
+                color: "white",
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              View Rewards
+            </button>
+
+            <button
+              onClick={() => {
+                localStorage.removeItem("currentUser");
+                localStorage.removeItem("currentParentEmail");
+                window.location.href = "/login";
+              }}
+              style={{
+                padding: "9px 18px",
+                borderRadius: 12,
+                border: "1px solid #dbe7e6",
+                background: "white",
+                color: "#567",
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Sign Out
+            </button>
+          </div>
         </section>
 
         {loading && (
@@ -443,65 +460,6 @@ export default function ParentDashboardPage() {
               >
                 Speech Homework
               </h2>
-
-              {/* DEBUG INFO */}
-              <div
-                style={{
-                  background: "#f0f0f0",
-                  padding: 12,
-                  borderRadius: 8,
-                  marginBottom: 16,
-                  fontSize: 12,
-                  fontFamily: "monospace",
-                  overflowX: "auto",
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-all",
-                }}
-              >
-                <p style={{ marginTop: 0, marginBottom: 4 }}>
-                  parentEmail: "{parentEmail}"
-                </p>
-                <p style={{ marginBottom: 4 }}>
-                  assignments.length: {assignments.length}
-                </p>
-                <p style={{ marginBottom: 4 }}>
-                  children.length: {children.length}
-                </p>
-                <p style={{ marginBottom: 4 }}>
-                  parentChildren.length: {parentChildren.length}
-                </p>
-                {children.length > 0 && (
-                  <p style={{ marginBottom: 4 }}>
-                    First child: id="{children[0].id}" email="
-                    {children[0].parent_email}"
-                  </p>
-                )}
-                {assignments.length > 0 && (
-                  <p style={{ marginBottom: 4 }}>
-                    First assignment: child_id="{assignments[0].child_id}"
-                  </p>
-                )}
-              </div>
-
-              <button
-                onClick={() => {
-                  const testEmail = "nwiltshir@gmail.com";
-                  window.location.href =
-                    `/parent?email=` + encodeURIComponent(testEmail);
-                }}
-                style={{
-                  background: "#999",
-                  color: "white",
-                  padding: "6px 12px",
-                  borderRadius: 6,
-                  border: "none",
-                  cursor: "pointer",
-                  fontSize: 12,
-                  marginBottom: 16,
-                }}
-              >
-                Test with nwiltshir@gmail.com
-              </button>
 
               {parentAssignments.length === 0 && (
                 <p

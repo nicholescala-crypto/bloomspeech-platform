@@ -1,5 +1,13 @@
 import { useState } from "react";
 
+function clearStaleRoleData(activeRole: "parent" | "clinician") {
+  if (activeRole === "parent") {
+    localStorage.removeItem("currentClinicianEmail");
+  } else {
+    localStorage.removeItem("currentParentEmail");
+  }
+}
+
 export default function LoginPage() {
   const [parentEmail, setParentEmail] = useState("");
   const [clinicianEmail, setClinicianEmail] = useState("");
@@ -12,6 +20,7 @@ export default function LoginPage() {
       return;
     }
 
+    clearStaleRoleData("parent");
     localStorage.setItem("currentParentEmail", cleanEmail);
 
     localStorage.setItem(
@@ -33,6 +42,9 @@ export default function LoginPage() {
       return;
     }
 
+    localStorage.setItem("currentClinicianEmail", cleanEmail);
+
+    clearStaleRoleData("clinician");
     localStorage.setItem("currentClinicianEmail", cleanEmail);
 
     localStorage.setItem(
@@ -77,7 +89,7 @@ export default function LoginPage() {
             textAlign: "center",
           }}
         >
-          Bloom Speech Practice
+          Bloom Therapy Practice
         </h1>
 
         <p
@@ -89,7 +101,7 @@ export default function LoginPage() {
             textAlign: "center",
           }}
         >
-          Sign in to view or assign speech practice homework.
+          Sign in to view or assign Bloom Therapy speech practice homework.
         </p>
 
         <div

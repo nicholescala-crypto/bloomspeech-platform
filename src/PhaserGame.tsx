@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Phaser from "phaser";
 
 type Item = {
@@ -20,8 +20,45 @@ type Props = {
   onComplete?: (stars: number) => void;
 };
 
+const BG_COLORS: Record<string, string> = {
+  "bg-moon": "#d6e8f5",
+  "bg-mars": "#fdd5b5",
+  "bg-galaxy": "#dfd4f5",
+};
+
+const ROCKET_EMOJIS: Record<string, string> = {
+  "rocket-red": "🚀",
+  "rocket-star": "🌟",
+  "rocket-fire": "🔥",
+};
+
+const AVATAR_EMOJIS: Record<string, string> = {
+  "avatar-cat": "🐱",
+  "avatar-dog": "🐶",
+  "avatar-star": "⭐",
+};
+
+function readEquipped() {
+  try {
+    const email = localStorage.getItem("currentParentEmail") || "guest";
+    const saved = JSON.parse(localStorage.getItem(`bloom-rewards-${email}`) || "null") ?? {};
+    return {
+      rocket: saved.selectedRocket as string | undefined,
+      background: saved.selectedBackground as string | undefined,
+      avatar: saved.selectedAvatar as string | undefined,
+    };
+  } catch {
+    return { rocket: undefined, background: undefined, avatar: undefined };
+  }
+}
+
 export default function PhaserGame({ words, onComplete }: Props) {
   const gameRef = useRef<Phaser.Game | null>(null);
+  const [equipped] = useState(() => readEquipped());
+
+  const bgColor = (equipped.background && BG_COLORS[equipped.background]) ?? "#eef7ff";
+  const rocketEmoji = equipped.rocket ? ROCKET_EMOJIS[equipped.rocket] : null;
+  const avatarEmoji = equipped.avatar ? AVATAR_EMOJIS[equipped.avatar] : null;
 
   useEffect(() => {
     if (gameRef.current) return;
@@ -54,7 +91,7 @@ export default function PhaserGame({ words, onComplete }: Props) {
     }
 
     function create(this: Phaser.Scene) {
-      this.cameras.main.setBackgroundColor("#eef7ff");
+      this.cameras.main.setBackgroundColor(bgColor);
 
       this.add
         .text(400, 25, "Speech Sound Practice", {
@@ -116,6 +153,10 @@ export default function PhaserGame({ words, onComplete }: Props) {
 
         cards.push({ frame, image, label, x: pos.x, y: pos.y, item: null });
       });
+
+      if (avatarEmoji) {
+        this.add.text(16, 600, avatarEmoji, { fontSize: "44px" }).setOrigin(0, 1);
+      }
 
       this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
         const px = pointer.x;
@@ -197,6 +238,18 @@ export default function PhaserGame({ words, onComplete }: Props) {
           },
         });
 
+        if (rocketEmoji) {
+          const yPos = 260 + Math.random() * 120;
+          const rocket = scene.add.text(-60, yPos, rocketEmoji, { fontSize: "52px" });
+          scene.tweens.add({
+            targets: rocket,
+            x: 860,
+            duration: 700,
+            ease: "Power2",
+            onComplete: () => rocket.destroy(),
+          });
+        }
+
         scene.time.delayedCall(1200, () => {
           round += 1;
 
@@ -235,7 +288,7 @@ export default function PhaserGame({ words, onComplete }: Props) {
       width: 800,
       height: 620,
       parent: "game-container",
-      backgroundColor: "#eef7ff",
+      backgroundColor: bgColor,
       scene: { preload, create },
       scale: { mode: Phaser.Scale.NONE },
     };
@@ -246,7 +299,7 @@ export default function PhaserGame({ words, onComplete }: Props) {
       gameRef.current?.destroy(true);
       gameRef.current = null;
     };
-  }, [words, onComplete]);
+  }, [words, onComplete, bgColor, rocketEmoji, avatarEmoji]);
 
   return (
     <div
@@ -257,7 +310,7 @@ export default function PhaserGame({ words, onComplete }: Props) {
         margin: "0 auto",
         overflow: "hidden",
         border: "2px solid #cbd5e1",
-        background: "#eef7ff",
+        background: bgColor,
         borderRadius: 16,
       }}
     />

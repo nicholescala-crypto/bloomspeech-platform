@@ -125,7 +125,7 @@ export default function RewardsShopPage() {
     Clinician Dashboard
   </button>
 
-  <button onClick={() => window.location.href = "/parent"} style={navButton}>
+  <button onClick={() => window.location.href = "/play"} style={navButton}>
     Play Game
   </button>
 </div>
