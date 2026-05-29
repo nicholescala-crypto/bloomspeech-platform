@@ -85,13 +85,47 @@ export default function PhaserGame({ words, onComplete, mode = "word" }: Props) 
 
     const cards: Card[] = [];
 
+    // Track which audio keys Phaser successfully loaded
+    const loadedAudio = new Set<string>();
+
+    // Web Audio API fallback for words without MP3 (e.g. multisyllabic M4A files)
+    const audioFallbacks = new Map<string, AudioBuffer>();
+    const webAudioCtx = new AudioContext();
+
+    items.forEach((item) => {
+      fetch(`/audio/${item.key}.m4a`)
+        .then((r) => (r.ok ? r.arrayBuffer() : null))
+        .then((buf) => (buf ? webAudioCtx.decodeAudioData(buf) : null))
+        .then((decoded) => {
+          if (decoded) audioFallbacks.set(item.key, decoded);
+        })
+        .catch(() => {});
+    });
+
+    function playAudio(sound: string, word: string, scene: Phaser.Scene) {
+      if (loadedAudio.has(sound)) {
+        try { scene.sound.play(sound); } catch {}
+      } else {
+        const buffer = audioFallbacks.get(word);
+        if (buffer && webAudioCtx.state !== "closed") {
+          if (webAudioCtx.state === "suspended") webAudioCtx.resume();
+          try {
+            const source = webAudioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(webAudioCtx.destination);
+            source.start();
+          } catch {}
+        }
+      }
+    }
+
     function preload(this: Phaser.Scene) {
+      this.load.on("filecomplete", (key: string, type: string) => {
+        if (type === "audio") loadedAudio.add(key);
+      });
       items.forEach((item) => {
         this.load.image(item.key, `/Images/${item.key}.png`);
-        this.load.audio(item.sound, [
-          `/audio/${item.key}.mp3`,
-          `/audio/${item.key}.m4a`,
-        ]);
+        this.load.audio(item.sound, `/audio/${item.key}.mp3`);
       });
     }
 
@@ -197,11 +231,7 @@ export default function PhaserGame({ words, onComplete, mode = "word" }: Props) 
         `Round ${round}/${totalRounds} — Tap: "${currentTarget.key}"`
       );
 
-      try {
-        scene.sound.play(currentTarget.sound);
-      } catch {
-        // audio may not be available for all words
-      }
+      playAudio(currentTarget.sound, currentTarget.key, scene);
 
       currentChoices.forEach((item, i) => {
         const card = cards[i];
@@ -218,11 +248,7 @@ export default function PhaserGame({ words, onComplete, mode = "word" }: Props) 
     function handleCardClick(scene: Phaser.Scene, card: Card) {
       if (locked || !currentTarget || !card.item) return;
 
-      try {
-        scene.sound.play(card.item.sound);
-      } catch {
-        // audio may not be available
-      }
+      playAudio(card.item.sound, card.item.key, scene);
 
       if (card.item.key === currentTarget.key) {
         locked = true;
@@ -303,6 +329,7 @@ export default function PhaserGame({ words, onComplete, mode = "word" }: Props) 
     return () => {
       gameRef.current?.destroy(true);
       gameRef.current = null;
+      webAudioCtx.close().catch(() => {});
     };
   }, [words, onComplete, bgColor, rocketEmoji, avatarEmoji, mode]);
 
