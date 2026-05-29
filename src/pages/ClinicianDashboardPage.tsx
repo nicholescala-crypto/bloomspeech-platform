@@ -88,6 +88,8 @@ export default function ClinicianDashboardPage() {
   const [clinicianNote, setClinicianNote] = useState("");
   const [customWord, setCustomWord] = useState("");
   const [selectedWords, setSelectedWords] = useState<string[]>([]);
+  const [practiceMode, setPracticeMode] = useState<"word" | "sentence">("word");
+  const [sentenceText, setSentenceText] = useState("");
 
   const clinicianEmail = getClinicianEmail();
 
@@ -183,8 +185,17 @@ export default function ClinicianDashboardPage() {
       return;
     }
 
-    if (selectedWords.length === 0) {
-      alert("Please choose at least one word.");
+    const wordsToSave =
+      practiceMode === "sentence"
+        ? sentenceText.split("\n").map((s) => s.trim()).filter(Boolean)
+        : selectedWords;
+
+    if (wordsToSave.length === 0) {
+      alert(
+        practiceMode === "sentence"
+          ? "Please enter at least one sentence."
+          : "Please choose at least one word."
+      );
       return;
     }
 
@@ -198,7 +209,7 @@ export default function ClinicianDashboardPage() {
       target_sound: targetSound,
       target_position: targetPosition,
       difficulty,
-      words: selectedWords,
+      words: wordsToSave,
       clinician_note: clinicianNote,
     });
 
@@ -369,57 +380,93 @@ export default function ClinicianDashboardPage() {
                 </select>
               </div>
 
-              <h3 style={{ color: "#163b3f" }}>Choose Words</h3>
-
-              <div style={wordGridStyle}>
-                {DEFAULT_WORDS.map((word) => {
-                  const isSelected = selectedWords.includes(word);
-
-                  return (
-                    <button
-                      key={word}
-                      onClick={() => toggleWord(word)}
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        gap: 4,
-                        padding: "8px 8px 6px",
-                        borderRadius: 14,
-                        border: isSelected
-                          ? "2px solid #22c55e"
-                          : "1px solid #dbe7e6",
-                        background: isSelected ? "#dcfce7" : "#f8fbfb",
-                        color: "#163b3f",
-                        fontWeight: 700,
-                        fontSize: 13,
-                        cursor: "pointer",
-                        width: 90,
-                      }}
-                    >
-                      <img
-                        src={`/Images/${word}.png`}
-                        alt={word}
-                        style={{ width: 60, height: 60, objectFit: "contain" }}
-                      />
-                      {word}
-                    </button>
-                  );
-                })}
-              </div>
-
               <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
-                <input
-                  value={customWord}
-                  onChange={(event) => setCustomWord(event.target.value)}
-                  placeholder="Add custom word"
-                  style={inputStyle}
-                />
-
-                <button onClick={addCustomWord} style={tealButtonStyle}>
-                  Add Word
+                <button
+                  onClick={() => setPracticeMode("word")}
+                  style={{
+                    ...tealButtonStyle,
+                    background: practiceMode === "word" ? "#163b3f" : "#e2e8f0",
+                    color: practiceMode === "word" ? "white" : "#163b3f",
+                  }}
+                >
+                  Word Practice
+                </button>
+                <button
+                  onClick={() => setPracticeMode("sentence")}
+                  style={{
+                    ...tealButtonStyle,
+                    background: practiceMode === "sentence" ? "#163b3f" : "#e2e8f0",
+                    color: practiceMode === "sentence" ? "white" : "#163b3f",
+                  }}
+                >
+                  Sentence Practice
                 </button>
               </div>
+
+              {practiceMode === "word" ? (
+                <>
+                  <h3 style={{ color: "#163b3f" }}>Choose Words</h3>
+                  <div style={wordGridStyle}>
+                    {DEFAULT_WORDS.map((word) => {
+                      const isSelected = selectedWords.includes(word);
+                      return (
+                        <button
+                          key={word}
+                          onClick={() => toggleWord(word)}
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            gap: 4,
+                            padding: "8px 8px 6px",
+                            borderRadius: 14,
+                            border: isSelected
+                              ? "2px solid #22c55e"
+                              : "1px solid #dbe7e6",
+                            background: isSelected ? "#dcfce7" : "#f8fbfb",
+                            color: "#163b3f",
+                            fontWeight: 700,
+                            fontSize: 13,
+                            cursor: "pointer",
+                            width: 90,
+                          }}
+                        >
+                          <img
+                            src={`/Images/${word}.png`}
+                            alt={word}
+                            style={{ width: 60, height: 60, objectFit: "contain" }}
+                          />
+                          {word}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
+                    <input
+                      value={customWord}
+                      onChange={(event) => setCustomWord(event.target.value)}
+                      placeholder="Add custom word"
+                      style={inputStyle}
+                    />
+                    <button onClick={addCustomWord} style={tealButtonStyle}>
+                      Add Word
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 style={{ color: "#163b3f" }}>Type Sentences</h3>
+                  <p style={{ color: "#567", marginTop: 0, marginBottom: 10, fontSize: 15 }}>
+                    One sentence per line. The child will read each one aloud during practice.
+                  </p>
+                  <textarea
+                    value={sentenceText}
+                    onChange={(e) => setSentenceText(e.target.value)}
+                    placeholder={"The cat sat on the mat.\nShe sells seashells by the seashore.\nThe big dog ran fast."}
+                    style={{ ...textareaStyle, minHeight: 160, marginBottom: 18 }}
+                  />
+                </>
+              )}
 
               <textarea
                 value={clinicianNote}
@@ -492,7 +539,15 @@ export default function ClinicianDashboardPage() {
                   </p>
 
                   <p style={{ color: "#567" }}>
-                    <strong>Words:</strong> {assignment.words.join(", ")}
+                    <strong>Mode:</strong>{" "}
+                    {assignment.words.some((w) => w.includes(" "))
+                      ? "Sentence Practice"
+                      : "Word Practice"}
+                  </p>
+                  <p style={{ color: "#567" }}>
+                    <strong>Content:</strong>{" "}
+                    {assignment.words.slice(0, 3).join(", ")}
+                    {assignment.words.length > 3 ? "…" : ""}
                   </p>
 
                   <p style={{ color: "#567" }}>

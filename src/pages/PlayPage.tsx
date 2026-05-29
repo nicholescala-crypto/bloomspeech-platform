@@ -14,6 +14,11 @@ function getTargetSoundFromUrl(): string {
   return params.get("targetSound") || "";
 }
 
+function getModeFromUrl(): "word" | "sentence" {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("mode") === "sentence" ? "sentence" : "word";
+}
+
 function addStars(earned: number) {
   const email = localStorage.getItem("currentParentEmail") || "guest";
   const key = `bloom-rewards-${email}`;
@@ -29,6 +34,7 @@ function addStars(earned: number) {
 export default function PlayPage() {
   const words = getWordsFromUrl();
   const targetSound = getTargetSoundFromUrl();
+  const mode = getModeFromUrl();
   const [modalOpen, setModalOpen] = useState(false);
   const [starsEarned, setStarsEarned] = useState(0);
 
@@ -122,7 +128,7 @@ export default function PlayPage() {
           )}
         </header>
 
-        <PhaserGame words={words} onComplete={handleSessionComplete} />
+        <PhaserGame words={words} onComplete={handleSessionComplete} mode={mode} />
 
         <div style={{ textAlign: "center", marginTop: 20 }}>
           <button

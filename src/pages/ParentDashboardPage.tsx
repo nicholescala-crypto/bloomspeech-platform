@@ -501,6 +501,27 @@ export default function ParentDashboardPage() {
                       {assignment.target_sound || assignment.targetSound || ""}
                     </h3>
 
+                    <span
+                      style={{
+                        display: "inline-block",
+                        marginBottom: 10,
+                        padding: "3px 10px",
+                        borderRadius: 8,
+                        fontSize: 13,
+                        fontWeight: 700,
+                        background: words.some((w) => w.includes(" "))
+                          ? "#dbeafe"
+                          : "#dcfce7",
+                        color: words.some((w) => w.includes(" "))
+                          ? "#1e40af"
+                          : "#166534",
+                      }}
+                    >
+                      {words.some((w) => w.includes(" "))
+                        ? "Sentence Practice"
+                        : "Word Practice"}
+                    </span>
+
                     <p>
                       <strong>Position:</strong>{" "}
                       {assignment.target_position ||
@@ -558,11 +579,16 @@ export default function ParentDashboardPage() {
                           assignment.selected_words ||
                           [];
 
+                        const mode = assignmentWords.some((w) => w.includes(" "))
+                          ? "sentence"
+                          : "word";
+
                         const params = new URLSearchParams({
                           assignmentId: assignment.id,
                           targetSound,
                           targetPosition,
                           words: assignmentWords.join(","),
+                          mode,
                         });
 
                         window.location.href = `/play?${params.toString()}`;

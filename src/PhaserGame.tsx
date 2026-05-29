@@ -18,6 +18,7 @@ type Card = {
 type Props = {
   words: string[];
   onComplete?: (stars: number) => void;
+  mode?: "word" | "sentence";
 };
 
 const BG_COLORS: Record<string, string> = {
@@ -52,7 +53,7 @@ function readEquipped() {
   }
 }
 
-export default function PhaserGame({ words, onComplete }: Props) {
+export default function PhaserGame({ words, onComplete, mode = "word" }: Props) {
   const gameRef = useRef<Phaser.Game | null>(null);
   const [equipped] = useState(() => readEquipped());
 
@@ -61,6 +62,7 @@ export default function PhaserGame({ words, onComplete }: Props) {
   const avatarEmoji = equipped.avatar ? AVATAR_EMOJIS[equipped.avatar] : null;
 
   useEffect(() => {
+    if (mode === "sentence") return;
     if (gameRef.current) return;
 
     const items: Item[] = words.map((word) => ({
@@ -299,7 +301,19 @@ export default function PhaserGame({ words, onComplete }: Props) {
       gameRef.current?.destroy(true);
       gameRef.current = null;
     };
-  }, [words, onComplete, bgColor, rocketEmoji, avatarEmoji]);
+  }, [words, onComplete, bgColor, rocketEmoji, avatarEmoji, mode]);
+
+  if (mode === "sentence") {
+    return (
+      <SentenceFlashcard
+        sentences={words}
+        onComplete={onComplete}
+        bgColor={bgColor}
+        avatarEmoji={avatarEmoji}
+        rocketEmoji={rocketEmoji}
+      />
+    );
+  }
 
   return (
     <div
@@ -314,5 +328,132 @@ export default function PhaserGame({ words, onComplete }: Props) {
         borderRadius: 16,
       }}
     />
+  );
+}
+
+function SentenceFlashcard({
+  sentences,
+  onComplete,
+  bgColor,
+  avatarEmoji,
+  rocketEmoji,
+}: {
+  sentences: string[];
+  onComplete?: (stars: number) => void;
+  bgColor: string;
+  avatarEmoji: string | null;
+  rocketEmoji: string | null;
+}) {
+  const [current, setCurrent] = useState(0);
+  const [done, setDone] = useState(false);
+  const [showRocket, setShowRocket] = useState(false);
+
+  function handleNext() {
+    if (rocketEmoji) {
+      setShowRocket(true);
+      setTimeout(() => setShowRocket(false), 700);
+    }
+
+    if (current + 1 >= sentences.length) {
+      setDone(true);
+      setTimeout(() => onComplete?.(sentences.length), 1000);
+    } else {
+      setCurrent((c) => c + 1);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        width: "800px",
+        height: "620px",
+        margin: "0 auto",
+        background: bgColor,
+        border: "2px solid #cbd5e1",
+        borderRadius: 16,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "40px",
+        boxSizing: "border-box",
+        position: "relative",
+        overflow: "hidden",
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      }}
+    >
+      {showRocket && rocketEmoji && (
+        <div
+          style={{
+            position: "absolute",
+            top: "42%",
+            right: 24,
+            fontSize: 52,
+            pointerEvents: "none",
+          }}
+        >
+          {rocketEmoji}
+        </div>
+      )}
+
+      <div style={{ color: "#2563eb", fontWeight: 700, fontSize: 18, marginBottom: 12 }}>
+        {done ? "" : `Sentence ${current + 1} of ${sentences.length}`}
+      </div>
+
+      <div style={{ color: "#374151", fontSize: 22, fontWeight: 600, marginBottom: 32 }}>
+        {done ? "Great job! All done! 🎉" : "Say this sentence:"}
+      </div>
+
+      {!done && (
+        <div
+          style={{
+            background: "white",
+            borderRadius: 20,
+            padding: "32px 40px",
+            fontSize: 26,
+            fontWeight: 700,
+            color: "#163b3f",
+            textAlign: "center",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+            maxWidth: 580,
+            lineHeight: 1.5,
+            marginBottom: 40,
+          }}
+        >
+          {sentences[current]}
+        </div>
+      )}
+
+      {!done && (
+        <button
+          onClick={handleNext}
+          style={{
+            padding: "16px 48px",
+            borderRadius: 16,
+            border: "none",
+            background: "#163b3f",
+            color: "white",
+            fontSize: 20,
+            fontWeight: 800,
+            cursor: "pointer",
+          }}
+        >
+          Got it! ✓
+        </button>
+      )}
+
+      {avatarEmoji && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 16,
+            left: 16,
+            fontSize: 44,
+          }}
+        >
+          {avatarEmoji}
+        </div>
+      )}
+    </div>
   );
 }
