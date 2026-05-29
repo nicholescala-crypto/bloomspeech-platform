@@ -6,7 +6,7 @@ function getWordsFromUrl(): string[] {
   const params = new URLSearchParams(window.location.search);
   const raw = params.get("words");
   if (!raw) return [];
-  return raw.split(",").map((w) => w.trim().toLowerCase()).filter(Boolean);
+  return raw.split(",").map((w) => w.trim()).filter(Boolean);
 }
 
 function getTargetSoundFromUrl(): string {
