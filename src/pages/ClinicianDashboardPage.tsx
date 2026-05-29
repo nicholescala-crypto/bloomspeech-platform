@@ -22,6 +22,23 @@ type PracticeAssignment = {
   created_at?: string;
 };
 
+const MULTISYLLABIC_WORDS = [
+  // 3 syllables
+  "elephant", "umbrella", "butterfly", "kangaroo", "strawberry",
+  "yesterday", "together", "remember", "hospital", "beautiful",
+  "adventure", "crocodile", "hamburger", "banana", "tomato",
+  "avocado", "computer", "recorder", "another", "delivery",
+  "family", "animal", "calendar", "camera", "energy",
+  "cucumber", "newspaper", "grandmother", "grandfather", "neighborhood",
+  "basketball", "celebrate", "continue", "eleven", "enormous",
+  "magazine", "medallion", "officer", "operatе", "telephone",
+  // 4 syllables
+  "caterpillar", "watermelon", "alligator", "helicopter", "calculator",
+  "refrigerator", "motorcycle", "submarine", "spaghetti", "television",
+  "supermarket", "firefighter", "ballerina", "caterpillar", "imagination",
+  "understanding", "discovery", "elementary", "everybody", "information",
+];
+
 const DEFAULT_WORDS = [
   "apple", "bacon", "baking", "ball", "baseball", "bath", "bear", "begging",
   "bench", "bicycle", "bike", "birthday", "book", "brush", "bug", "bus",
@@ -405,9 +422,16 @@ export default function ClinicianDashboardPage() {
 
               {practiceMode === "word" ? (
                 <>
-                  <h3 style={{ color: "#163b3f" }}>Choose Words</h3>
+                  <h3 style={{ color: "#163b3f" }}>
+                    Choose Words
+                    {difficulty === "Hard" && (
+                      <span style={{ fontSize: 13, fontWeight: 500, color: "#7c3aed", marginLeft: 10 }}>
+                        Multisyllabic words
+                      </span>
+                    )}
+                  </h3>
                   <div style={wordGridStyle}>
-                    {DEFAULT_WORDS.map((word) => {
+                    {(difficulty === "Hard" ? MULTISYLLABIC_WORDS : DEFAULT_WORDS).map((word) => {
                       const isSelected = selectedWords.includes(word);
                       return (
                         <button
