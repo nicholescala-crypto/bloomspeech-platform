@@ -88,7 +88,10 @@ export default function PhaserGame({ words, onComplete, mode = "word" }: Props) 
     function preload(this: Phaser.Scene) {
       items.forEach((item) => {
         this.load.image(item.key, `/Images/${item.key}.png`);
-        this.load.audio(item.sound, `/audio/${item.key}.mp3`);
+        this.load.audio(item.sound, [
+          `/audio/${item.key}.mp3`,
+          `/audio/${item.key}.m4a`,
+        ]);
       });
     }
 
