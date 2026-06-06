@@ -79,11 +79,88 @@ async function getParentEmail(): Promise<string> {
   return "";
 }
 
+// ─── Sound theme ────────────────────────────────────────────────────────────
+
+type SoundTheme = {
+  headerGradient: string;
+  chipBg: string;
+  chipText: string;
+  playGradient: string;
+  badgeBg: string;
+  badgeText: string;
+};
+
+function getSoundTheme(sound: string): SoundTheme {
+  const s = (sound || "").toLowerCase();
+  if (s.includes("sh")) return {
+    headerGradient: "linear-gradient(135deg, #7c3aed, #6d28d9)",
+    chipBg: "#ede9fe", chipText: "#4c1d95",
+    playGradient: "linear-gradient(135deg, #7c3aed, #6d28d9)",
+    badgeBg: "#ddd6fe", badgeText: "#4c1d95",
+  };
+  if (s.includes("ch")) return {
+    headerGradient: "linear-gradient(135deg, #d97706, #b45309)",
+    chipBg: "#fef3c7", chipText: "#78350f",
+    playGradient: "linear-gradient(135deg, #f59e0b, #d97706)",
+    badgeBg: "#fde68a", badgeText: "#78350f",
+  };
+  if (s.includes("r")) return {
+    headerGradient: "linear-gradient(135deg, #dc2626, #b91c1c)",
+    chipBg: "#fee2e2", chipText: "#991b1b",
+    playGradient: "linear-gradient(135deg, #ef4444, #dc2626)",
+    badgeBg: "#fecaca", badgeText: "#7f1d1d",
+  };
+  if (s.includes("s")) return {
+    headerGradient: "linear-gradient(135deg, #0d9488, #0f766e)",
+    chipBg: "#ccfbf1", chipText: "#134e4a",
+    playGradient: "linear-gradient(135deg, #14b8a6, #0d9488)",
+    badgeBg: "#99f6e4", badgeText: "#134e4a",
+  };
+  if (s.includes("l")) return {
+    headerGradient: "linear-gradient(135deg, #9333ea, #7e22ce)",
+    chipBg: "#f3e8ff", chipText: "#581c87",
+    playGradient: "linear-gradient(135deg, #a855f7, #9333ea)",
+    badgeBg: "#e9d5ff", badgeText: "#4c1d95",
+  };
+  if (s.includes("k")) return {
+    headerGradient: "linear-gradient(135deg, #ea580c, #c2410c)",
+    chipBg: "#ffedd5", chipText: "#7c2d12",
+    playGradient: "linear-gradient(135deg, #f97316, #ea580c)",
+    badgeBg: "#fed7aa", badgeText: "#7c2d12",
+  };
+  return {
+    headerGradient: "linear-gradient(135deg, #2563eb, #1d4ed8)",
+    chipBg: "#dbeafe", chipText: "#1e3a8a",
+    playGradient: "linear-gradient(135deg, #3b82f6, #2563eb)",
+    badgeBg: "#bfdbfe", badgeText: "#1e40af",
+  };
+}
+
+function difficultyStars(difficulty?: string): string {
+  const d = (difficulty || "").toLowerCase();
+  if (d === "easy") return "★☆☆";
+  if (d === "medium") return "★★☆";
+  if (d === "hard") return "★★★";
+  return "";
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
 export default function ParentDashboardPage() {
   const [children, setChildren] = useState<ChildProfile[]>([]);
   const [assignments, setAssignments] = useState<PracticeAssignment[]>([]);
   const [parentEmail, setParentEmail] = useState("");
   const [loading, setLoading] = useState(true);
+
+  // Inject Nunito from Google Fonts
+  useEffect(() => {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href =
+      "https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap";
+    document.head.appendChild(link);
+    return () => { document.head.removeChild(link); };
+  }, []);
 
   useEffect(() => {
     async function loadParentData() {
@@ -151,14 +228,18 @@ export default function ParentDashboardPage() {
           return;
         }
 
-        const { data: assignmentByParentEmail, error: parentEmailError } = await supabase
-          .from("assignments")
-          .select("*")
-          .ilike("parent_email", email)
-          .order("created_at", { ascending: false });
+        const { data: assignmentByParentEmail, error: parentEmailError } =
+          await supabase
+            .from("assignments")
+            .select("*")
+            .ilike("parent_email", email)
+            .order("created_at", { ascending: false });
 
         if (parentEmailError) {
-          console.error("Could not load assignments by parent_email:", parentEmailError);
+          console.error(
+            "Could not load assignments by parent_email:",
+            parentEmailError
+          );
           setAssignments(assignmentData || []);
           setLoading(false);
           return;
@@ -203,432 +284,399 @@ export default function ParentDashboardPage() {
   const parentChildren = useMemo(() => children, [children]);
   const parentAssignments = useMemo(() => assignments, [assignments]);
 
+  const childName =
+    parentChildren[0]?.child_name ||
+    parentChildren[0]?.name ||
+    parentChildren[0]?.childName ||
+    "";
+
+  const totalWords = parentAssignments.reduce((sum, a) => {
+    const w = a.words || a.selectedWords || a.selected_words || [];
+    return sum + w.length;
+  }, 0);
+
+  // ─── Render ───────────────────────────────────────────────────────────────
+
   return (
     <div
       style={{
         minHeight: "100vh",
-        background: "#f6fbfb",
-        padding: "48px 20px",
-        fontFamily:
-          '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        background: "#f0faf8",
+        fontFamily: "'Nunito', -apple-system, BlinkMacSystemFont, sans-serif",
         color: "#163b3f",
       }}
     >
+      {/* ── Hero header ── */}
       <div
         style={{
-          maxWidth: 900,
-          margin: "0 auto",
+          background: "linear-gradient(135deg, #134e40 0%, #1a7a5e 55%, #22c991 100%)",
+          padding: "44px 24px 72px",
+          position: "relative",
+          overflow: "hidden",
         }}
       >
-        <section
-          style={{
-            background: "white",
-            padding: 32,
-            borderRadius: 24,
-            boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-            marginBottom: 24,
-          }}
-        >
-          <h1
-            style={{
-              marginTop: 0,
-              marginBottom: 12,
-              fontSize: 34,
-              color: "#163b3f",
-            }}
-          >
-            Parent Portal
-          </h1>
+        {/* Decorative blobs */}
+        <div style={{
+          position: "absolute", top: -60, right: -60,
+          width: 240, height: 240, borderRadius: "50%",
+          background: "rgba(255,255,255,0.07)",
+        }} />
+        <div style={{
+          position: "absolute", bottom: -30, left: -30,
+          width: 160, height: 160, borderRadius: "50%",
+          background: "rgba(255,255,255,0.07)",
+        }} />
 
-          <p
-            style={{
-              margin: 0,
-              fontSize: 18,
-              color: "#4f6378",
-            }}
-          >
-            View your child's speech homework.
+        <div style={{ maxWidth: 720, margin: "0 auto", position: "relative" }}>
+          <p style={{
+            color: "rgba(255,255,255,0.7)",
+            margin: "0 0 8px",
+            fontSize: 13,
+            fontWeight: 800,
+            textTransform: "uppercase",
+            letterSpacing: "0.12em",
+          }}>
+            Speech Homework
           </p>
 
+          <h1 style={{
+            color: "white",
+            margin: "0 0 6px",
+            fontSize: childName ? 42 : 34,
+            fontWeight: 900,
+            lineHeight: 1.1,
+          }}>
+            {childName ? `Hi, ${childName}! 👋` : "Parent Portal"}
+          </h1>
+
           {parentEmail && (
-            <p
-              style={{
-                marginTop: 18,
-                marginBottom: 0,
-                color: "#708196",
-                fontWeight: 600,
-              }}
-            >
-              Signed in as: {parentEmail}
+            <p style={{
+              color: "rgba(255,255,255,0.65)",
+              margin: "0 0 22px",
+              fontSize: 14,
+              fontWeight: 600,
+            }}>
+              {parentEmail}
             </p>
           )}
 
-          <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-            <button
-              onClick={() => { window.location.href = "/home-practice"; }}
-              style={{
-                padding: "9px 18px",
-                borderRadius: 12,
-                border: "none",
-                background: "#163b3f",
-                color: "white",
-                fontSize: 14,
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              Home Practice Guide
-            </button>
+          {/* Stat pills */}
+          {!loading && parentEmail && (
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <span style={statPill}>
+                {parentAssignments.length} assignment{parentAssignments.length !== 1 ? "s" : ""}
+              </span>
+              {totalWords > 0 && (
+                <span style={statPill}>{totalWords} words to practice</span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
-            <button
-              onClick={() => { window.location.href = "/rewards"; }}
-              style={{
-                padding: "9px 18px",
-                borderRadius: 12,
-                border: "1px solid #dbe7e6",
-                background: "white",
-                color: "#163b3f",
-                fontSize: 14,
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              View Rewards
-            </button>
-
-            <button
-              onClick={() => {
-                localStorage.removeItem("currentUser");
-                localStorage.removeItem("currentParentEmail");
-                window.location.href = "/login";
-              }}
-              style={{
-                padding: "9px 18px",
-                borderRadius: 12,
-                border: "1px solid #dbe7e6",
-                background: "white",
-                color: "#567",
-                fontSize: 14,
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
-            >
-              Sign Out
-            </button>
-          </div>
-        </section>
-
-        {loading && (
-          <section
-            style={{
-              background: "white",
-              padding: 28,
-              borderRadius: 24,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-            }}
+      {/* ── Action bar (overlaps hero) ── */}
+      <div style={{ maxWidth: 720, margin: "-28px auto 0", padding: "0 24px", position: "relative", zIndex: 10 }}>
+        <div style={{
+          background: "white",
+          borderRadius: 20,
+          padding: "14px 18px",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.13)",
+          display: "flex",
+          gap: 10,
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}>
+          <button
+            onClick={() => { window.location.href = "/home-practice"; }}
+            style={actionBtn("#163b3f", "white")}
           >
-            <h2 style={{ marginTop: 0 }}>Loading homework...</h2>
-          </section>
+            Practice Guide
+          </button>
+          <button
+            onClick={() => { window.location.href = "/superhero-game"; }}
+            style={actionBtn("#1e1b4b", "white")}
+          >
+            🦸 Superhero Game
+          </button>
+          <button
+            onClick={() => { window.location.href = "/rewards"; }}
+            style={actionBtn("#f0fdf9", "#163b3f", "1px solid #a7f3d0")}
+          >
+            View Rewards
+          </button>
+          <button
+            onClick={() => {
+              localStorage.removeItem("currentUser");
+              localStorage.removeItem("currentParentEmail");
+              window.location.href = "/login";
+            }}
+            style={{ ...actionBtn("transparent", "#94a3b8"), marginLeft: "auto" }}
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+
+      {/* ── Main content ── */}
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: "28px 24px 64px" }}>
+
+        {/* Loading */}
+        {loading && (
+          <div style={card}>
+            <p style={{ margin: 0, fontSize: 17, color: "#4f6378", fontWeight: 700 }}>
+              Loading homework...
+            </p>
+          </div>
         )}
 
+        {/* No email */}
         {!loading && !parentEmail && (
-          <section
-            style={{
-              background: "#fff4e5",
-              border: "1px solid #ffd7a3",
-              padding: 28,
-              borderRadius: 24,
-              color: "#7a4a00",
-            }}
-          >
-            <h2 style={{ marginTop: 0 }}>Parent email not found</h2>
-            <p>
+          <div style={{ ...card, background: "#fff7ed", border: "1px solid #fed7aa" }}>
+            <h2 style={{ marginTop: 0, color: "#92400e", fontWeight: 900 }}>
+              Parent email not found
+            </h2>
+            <p style={{ color: "#b45309", margin: "0 0 16px" }}>
               Go back to the login page and sign in with the same parent email
               that was added in the clinician dashboard.
             </p>
-
             <button
-              onClick={() => {
-                window.location.href = "/";
-              }}
-              style={{
-                marginTop: 12,
-                border: "none",
-                background: "#163b3f",
-                color: "white",
-                padding: "12px 18px",
-                borderRadius: 14,
-                cursor: "pointer",
-                fontWeight: 700,
-              }}
+              onClick={() => { window.location.href = "/"; }}
+              style={actionBtn("#163b3f", "white")}
             >
               Back to Login
             </button>
-          </section>
+          </div>
         )}
 
-        {!loading && parentEmail && parentChildren.length === 0 && parentAssignments.length === 0 && (
-          <section
-            style={{
-              background: "white",
-              padding: 28,
-              borderRadius: 24,
-              boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-            }}
-          >
-            <h2
-              style={{
-                color: "#163b3f",
-                marginTop: 0,
-              }}
-            >
-              No child linked yet
+        {/* No assignments yet */}
+        {!loading && parentEmail &&
+          parentChildren.length === 0 &&
+          parentAssignments.length === 0 && (
+          <div style={card}>
+            <h2 style={{ marginTop: 0, fontWeight: 900, color: "#163b3f" }}>
+              No homework yet
             </h2>
-
-            <p
-              style={{
-                color: "#4f6378",
-                fontSize: 16,
-              }}
-            >
-              A clinician needs to add a child profile using this parent email.
+            <p style={{ color: "#4f6378", margin: "0 0 16px" }}>
+              Your clinician hasn't posted any assignments yet. Check back soon!
             </p>
-
-            <p
-              style={{
-                color: "#a1bede",
-                fontSize: 15,
-                marginTop: 14,
-                marginBottom: 6,
-              }}
-            >
-              Normalized lookup email used for matching:
-            </p>
-
-            <div
-              style={{
-                background: "#eefafa",
-                padding: "14px 16px",
-                borderRadius: 12,
-                fontWeight: 700,
-                color: "#163b3f",
-              }}
-            >
-              {parentEmail}
+            <div style={{
+              background: "#f0faf8",
+              borderRadius: 12,
+              padding: "12px 16px",
+              fontWeight: 700,
+              color: "#0f766e",
+              fontSize: 14,
+            }}>
+              Signed in as: {parentEmail}
             </div>
-          </section>
+          </div>
         )}
 
-        {(!loading && (parentChildren.length > 0 || parentAssignments.length > 0)) && (
-          <>
-            {parentChildren.length > 0 && (
-              <section
-                style={{
-                  background: "white",
-                  padding: 28,
-                  borderRadius: 24,
-                  boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-                  marginBottom: 24,
-                }}
-              >
-                <h2
-                  style={{
-                    marginTop: 0,
-                    color: "#163b3f",
-                  }}
-                >
-                  Linked Child
-                </h2>
+        {/* Assignment cards */}
+        {!loading && parentAssignments.map((assignment) => {
+          const words =
+            assignment.words ||
+            assignment.selectedWords ||
+            assignment.selected_words ||
+            [];
 
-                {parentChildren.map((child) => (
-                  <div
-                    key={child.id}
-                    style={{
-                      background: "#eefafa",
-                      padding: 16,
-                      borderRadius: 14,
-                      marginTop: 12,
+          const isSentence = words.some((w) => w.includes(" "));
+          const sound = assignment.target_sound || assignment.targetSound || "";
+          const position = assignment.target_position || assignment.targetPosition || "";
+          const difficulty = assignment.difficulty || "";
+          const note = assignment.clinician_note || assignment.clinicianNote || "";
+          const theme = getSoundTheme(sound);
+          const stars = difficultyStars(difficulty);
+
+          return (
+            <div key={assignment.id} style={{ ...card, padding: 0, overflow: "hidden", marginBottom: 20 }}>
+              {/* Colored header */}
+              <div style={{
+                background: theme.headerGradient,
+                padding: "18px 22px 16px",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                  <span style={{
+                    background: "rgba(255,255,255,0.22)",
+                    color: "white",
+                    fontWeight: 900,
+                    fontSize: 20,
+                    padding: "4px 14px",
+                    borderRadius: 40,
+                    letterSpacing: "0.02em",
+                  }}>
+                    {sound || "Sound"}
+                  </span>
+
+                  <span style={{
+                    background: "rgba(255,255,255,0.18)",
+                    color: "white",
+                    fontWeight: 700,
+                    fontSize: 13,
+                    padding: "4px 12px",
+                    borderRadius: 20,
+                  }}>
+                    {isSentence ? "Sentence Practice" : "Word Practice"}
+                  </span>
+
+                  {position && (
+                    <span style={{
+                      background: "rgba(255,255,255,0.18)",
+                      color: "white",
                       fontWeight: 700,
-                    }}
-                  >
-                    {child.child_name ||
-                      child.name ||
-                      child.childName ||
-                      "Unnamed child"}
-                  </div>
-                ))}
-              </section>
-            )}
+                      fontSize: 13,
+                      padding: "4px 12px",
+                      borderRadius: 20,
+                    }}>
+                      {position}
+                    </span>
+                  )}
+                </div>
 
-            <section
-              style={{
-                background: "white",
-                padding: 28,
-                borderRadius: 24,
-                boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-              }}
-            >
-              <h2
-                style={{
-                  marginTop: 0,
-                  color: "#163b3f",
-                }}
-              >
-                Speech Homework
-              </h2>
-
-              {parentAssignments.length === 0 && (
-                <p
-                  style={{
-                    color: "#4f6378",
+                {stars && (
+                  <div style={{
+                    marginTop: 10,
+                    color: "rgba(255,255,255,0.9)",
                     fontSize: 16,
+                    fontWeight: 700,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}>
+                    <span style={{ letterSpacing: 2 }}>{stars}</span>
+                    <span style={{ fontSize: 13, opacity: 0.8 }}>{difficulty}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Card body */}
+              <div style={{ padding: "18px 22px 22px" }}>
+
+                {/* Word chips */}
+                {words.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <p style={{ margin: "0 0 10px", fontWeight: 800, fontSize: 13, color: "#708196", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      {isSentence ? "Sentences" : "Practice words"}
+                    </p>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {words.map((word) => (
+                        <span
+                          key={word}
+                          style={{
+                            background: theme.chipBg,
+                            color: theme.chipText,
+                            fontWeight: 700,
+                            fontSize: isSentence ? 13 : 14,
+                            padding: isSentence ? "6px 12px" : "5px 13px",
+                            borderRadius: 20,
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          {word}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Clinician note */}
+                {note && (
+                  <div style={{
+                    background: "#f8fbfb",
+                    border: "1px solid #e2eff0",
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                    marginBottom: 16,
+                    display: "flex",
+                    gap: 10,
+                    alignItems: "flex-start",
+                  }}>
+                    <span style={{ fontSize: 18, flexShrink: 0 }}>💬</span>
+                    <p style={{ margin: 0, fontSize: 14, color: "#4f6378", fontStyle: "italic", lineHeight: 1.5 }}>
+                      {note}
+                    </p>
+                  </div>
+                )}
+
+                {/* Play button — full width */}
+                <button
+                  onClick={() => {
+                    const targetSound = assignment.target_sound || assignment.targetSound || "k";
+                    const targetPosition = assignment.target_position || assignment.targetPosition || "Initial";
+                    const assignmentWords =
+                      assignment.words ||
+                      assignment.selectedWords ||
+                      assignment.selected_words ||
+                      [];
+                    const mode = assignmentWords.some((w) => w.includes(" ")) ? "sentence" : "word";
+                    const params = new URLSearchParams({
+                      assignmentId: assignment.id,
+                      targetSound,
+                      targetPosition,
+                      words: assignmentWords.join(","),
+                      mode,
+                    });
+                    window.location.href = `/play?${params.toString()}`;
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "15px 20px",
+                    border: "none",
+                    borderRadius: 14,
+                    background: theme.playGradient,
+                    color: "white",
+                    fontFamily: "'Nunito', sans-serif",
+                    fontSize: 16,
+                    fontWeight: 900,
+                    cursor: "pointer",
+                    letterSpacing: "0.02em",
+                    boxShadow: "0 4px 14px rgba(0,0,0,0.18)",
                   }}
                 >
-                  No assignments have been posted yet.
-                </p>
-              )}
-
-              {parentAssignments.map((assignment) => {
-                const words =
-                  assignment.words ||
-                  assignment.selectedWords ||
-                  assignment.selected_words ||
-                  [];
-
-                return (
-                  <div
-                    key={assignment.id}
-                    style={{
-                      border: "1px solid #e3eeee",
-                      borderRadius: 18,
-                      padding: 20,
-                      marginTop: 16,
-                      background: "#fbffff",
-                    }}
-                  >
-                    <h3
-                      style={{
-                        marginTop: 0,
-                        marginBottom: 10,
-                        color: "#163b3f",
-                      }}
-                    >
-                      Practice{" "}
-                      {assignment.target_sound || assignment.targetSound || ""}
-                    </h3>
-
-                    <span
-                      style={{
-                        display: "inline-block",
-                        marginBottom: 10,
-                        padding: "3px 10px",
-                        borderRadius: 8,
-                        fontSize: 13,
-                        fontWeight: 700,
-                        background: words.some((w) => w.includes(" "))
-                          ? "#dbeafe"
-                          : "#dcfce7",
-                        color: words.some((w) => w.includes(" "))
-                          ? "#1e40af"
-                          : "#166534",
-                      }}
-                    >
-                      {words.some((w) => w.includes(" "))
-                        ? "Sentence Practice"
-                        : "Word Practice"}
-                    </span>
-
-                    <p>
-                      <strong>Position:</strong>{" "}
-                      {assignment.target_position ||
-                        assignment.targetPosition ||
-                        "Not specified"}
-                    </p>
-
-                    <p>
-                      <strong>Difficulty:</strong>{" "}
-                      {assignment.difficulty || "Not specified"}
-                    </p>
-
-                    {(assignment.custom_word || assignment.customWord) && (
-                      <p>
-                        <strong>Custom word:</strong>{" "}
-                        {assignment.custom_word || assignment.customWord}
-                      </p>
-                    )}
-
-                    {words.length > 0 && (
-                      <div>
-                        <strong>Words:</strong>
-                        <ul>
-                          {words.map((word) => (
-                            <li key={word}>{word}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {(assignment.clinician_note ||
-                      assignment.clinicianNote) && (
-                      <p>
-                        <strong>Clinician note:</strong>{" "}
-                        {assignment.clinician_note ||
-                          assignment.clinicianNote}
-                      </p>
-                    )}
-
-                    <button
-                      onClick={() => {
-                        const targetSound =
-                          assignment.target_sound ||
-                          assignment.targetSound ||
-                          "k";
-
-                        const targetPosition =
-                          assignment.target_position ||
-                          assignment.targetPosition ||
-                          "Initial";
-
-                        const assignmentWords =
-                          assignment.words ||
-                          assignment.selectedWords ||
-                          assignment.selected_words ||
-                          [];
-
-                        const mode = assignmentWords.some((w) => w.includes(" "))
-                          ? "sentence"
-                          : "word";
-
-                        const params = new URLSearchParams({
-                          assignmentId: assignment.id,
-                          targetSound,
-                          targetPosition,
-                          words: assignmentWords.join(","),
-                          mode,
-                        });
-
-                        window.location.href = `/play?${params.toString()}`;
-                      }}
-                      style={{
-                        marginTop: 16,
-                        border: "none",
-                        background: "#163b3f",
-                        color: "white",
-                        padding: "12px 18px",
-                        borderRadius: 14,
-                        cursor: "pointer",
-                        fontWeight: 700,
-                      }}
-                    >
-                      Play Practice Game
-                    </button>
-                  </div>
-                );
-              })}
-            </section>
-          </>
-        )}
+                  ▶ Play Practice Game
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
+}
+
+// ─── Shared style helpers ────────────────────────────────────────────────────
+
+const card: React.CSSProperties = {
+  background: "white",
+  borderRadius: 20,
+  padding: 24,
+  boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+  marginBottom: 20,
+};
+
+const statPill: React.CSSProperties = {
+  background: "rgba(255,255,255,0.2)",
+  color: "white",
+  padding: "6px 16px",
+  borderRadius: 40,
+  fontSize: 14,
+  fontWeight: 700,
+};
+
+function actionBtn(
+  bg: string,
+  color: string,
+  border?: string
+): React.CSSProperties {
+  return {
+    padding: "9px 18px",
+    borderRadius: 12,
+    border: border ?? "none",
+    background: bg,
+    color,
+    fontSize: 14,
+    fontWeight: 800,
+    cursor: "pointer",
+    fontFamily: "'Nunito', sans-serif",
+  };
 }

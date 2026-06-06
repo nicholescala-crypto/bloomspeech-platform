@@ -5,6 +5,7 @@ import HomePracticePage from "./pages/HomePracticePage";
 import ClinicianDashboardPage from "./pages/ClinicianDashboardPage";
 import PlayPage from "./pages/PlayPage";
 import RewardsShopPage from "./pages/RewardsShopPage";
+import SuperheroGame from "./pages/SuperheroGame";
 
 type UserRole = "parent" | "clinician" | "";
 
@@ -108,6 +109,10 @@ export default function App() {
       return null;
     }
     return <HomePracticePage />;
+  }
+
+  if (path === "/superhero-game") {
+    return <SuperheroGame />;
   }
 
   if (path === "/play" || path === "/practice") {
