@@ -1,11 +1,9 @@
 import { useState } from "react";
 
-function clearStaleRoleData(activeRole: "parent" | "clinician") {
-  if (activeRole === "parent") {
-    localStorage.removeItem("currentClinicianEmail");
-  } else {
-    localStorage.removeItem("currentParentEmail");
-  }
+function clearStaleRoleData() {
+  localStorage.removeItem("currentClinicianEmail");
+  localStorage.removeItem("currentParentEmail");
+  localStorage.removeItem("currentUser");
 }
 
 export default function LoginPage() {
@@ -20,7 +18,7 @@ export default function LoginPage() {
       return;
     }
 
-    clearStaleRoleData("parent");
+    clearStaleRoleData();
     localStorage.setItem("currentParentEmail", cleanEmail);
 
     localStorage.setItem(
@@ -31,7 +29,7 @@ export default function LoginPage() {
       })
     );
 
-    window.location.href = "/parent";
+    window.location.replace("/parent");
   }
 
   function handleClinicianLogin() {
@@ -42,9 +40,7 @@ export default function LoginPage() {
       return;
     }
 
-    localStorage.setItem("currentClinicianEmail", cleanEmail);
-
-    clearStaleRoleData("clinician");
+    clearStaleRoleData();
     localStorage.setItem("currentClinicianEmail", cleanEmail);
 
     localStorage.setItem(
@@ -55,7 +51,7 @@ export default function LoginPage() {
       })
     );
 
-    window.location.href = "/clinician";
+    window.location.replace("/clinician");
   }
 
   return (

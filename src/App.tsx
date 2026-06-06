@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import LoginPage from "./pages/LoginPage";
 import ParentDashboardPage from "./pages/ParentDashboardPage";
+import HomePracticePage from "./pages/HomePracticePage";
 import ClinicianDashboardPage from "./pages/ClinicianDashboardPage";
 import PlayPage from "./pages/PlayPage";
 import RewardsShopPage from "./pages/RewardsShopPage";
@@ -24,34 +26,6 @@ function getCurrentUserRole(): UserRole {
   return "";
 }
 
-function redirectToRolePage(path: string, role: UserRole) {
-  if (role === "parent") {
-    const clinicianPaths = [
-      "/clinician",
-      "/clinician-dashboard",
-      "/clinician-portal",
-      "/clinical",
-      "/clinic",
-    ];
-
-    if (clinicianPaths.includes(path) || path === "/") {
-      window.location.replace("/parent");
-      return true;
-    }
-  }
-
-  if (role === "clinician") {
-    const parentPaths = ["/parent", "/parent-dashboard", "/parent-portal"];
-
-    if (parentPaths.includes(path) || path === "/" || path === "/login") {
-      window.location.replace("/clinician");
-      return true;
-    }
-  }
-
-  return false;
-}
-
 function NotFoundPage() {
   return (
     <div style={{ padding: 40, fontFamily: "Arial, sans-serif" }}>
@@ -68,14 +42,35 @@ function NotFoundPage() {
   );
 }
 
+const PARENT_PROTECTED_PATHS = [
+  "/parent",
+  "/parent-dashboard",
+  "/parent-portal",
+  "/home-practice",
+];
+
 export default function App() {
   const rawPath = window.location.pathname.toLowerCase();
   const path = rawPath.replace(/\/+$/, "") || "/";
-  const role = getCurrentUserRole();
+  const initialRole = getCurrentUserRole();
 
-  if (role && redirectToRolePage(path, role)) {
-    return null;
-  }
+  // When role appears empty on a parent-protected path, wait 300ms and re-check
+  // before redirecting — localStorage may not be populated yet after a cross-domain
+  // redirect (bloom-speech-homework.vercel.app <-> app.bloomtherapymt.com).
+  const isParentPath = PARENT_PROTECTED_PATHS.includes(path);
+  const [role, setRole] = useState<UserRole>(initialRole);
+  const [ready, setReady] = useState(initialRole !== "" || !isParentPath);
+
+  useEffect(() => {
+    if (ready) return;
+    const timer = setTimeout(() => {
+      setRole(getCurrentUserRole());
+      setReady(true);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [ready]);
+
+  if (!ready) return null;
 
   if (path === "/" || path === "/login") {
     return <LoginPage />;
@@ -105,6 +100,14 @@ export default function App() {
       return null;
     }
     return <ClinicianDashboardPage />;
+  }
+
+  if (path === "/home-practice") {
+    if (role !== "parent") {
+      window.location.replace("/login");
+      return null;
+    }
+    return <HomePracticePage />;
   }
 
   if (path === "/play" || path === "/practice") {

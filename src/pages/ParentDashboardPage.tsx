@@ -263,15 +263,31 @@ export default function ParentDashboardPage() {
             </p>
           )}
 
-          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+          <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
             <button
-              onClick={() => { window.location.href = "/rewards"; }}
+              onClick={() => { window.location.href = "/home-practice"; }}
               style={{
                 padding: "9px 18px",
                 borderRadius: 12,
                 border: "none",
                 background: "#163b3f",
                 color: "white",
+                fontSize: 14,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Home Practice Guide
+            </button>
+
+            <button
+              onClick={() => { window.location.href = "/rewards"; }}
+              style={{
+                padding: "9px 18px",
+                borderRadius: 12,
+                border: "1px solid #dbe7e6",
+                background: "white",
+                color: "#163b3f",
                 fontSize: 14,
                 fontWeight: 700,
                 cursor: "pointer",

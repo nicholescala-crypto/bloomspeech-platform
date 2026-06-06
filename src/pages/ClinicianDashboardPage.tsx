@@ -74,17 +74,16 @@ function getClinicianEmail() {
     return savedEmail.trim().toLowerCase();
   }
 
-  const currentUser = localStorage.getItem("currentUser");
-
-  if (currentUser) {
-    try {
-      const parsed = JSON.parse(currentUser);
-      if (parsed?.email) {
+  try {
+    const raw = localStorage.getItem("currentUser");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.role === "clinician" && parsed?.email) {
         return String(parsed.email).trim().toLowerCase();
       }
-    } catch {
-      return "";
     }
+  } catch {
+    return "";
   }
 
   return "";
