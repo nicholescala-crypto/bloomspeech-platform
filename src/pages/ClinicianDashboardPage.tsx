@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase.ts";
+import { WORD_EMOJIS, DEFAULT_WORD_EMOJI } from "../games/data/wordEmojis";
 type ChildProfile = {
   id: string;
   child_name: string;
@@ -39,6 +40,11 @@ const MULTISYLLABIC_WORDS = [
   "understanding", "discovery", "elementary", "everybody", "information",
 ];
 
+const SOUND_OPTIONS = [
+  "r", "s", "l", "ch", "sh", "th", "k", "g", "f", "v",
+  "st", "sp", "bl", "gr", "tr", "pr", "fr", "dr", "sw", "sn",
+];
+
 const DEFAULT_WORDS = [
   "apple", "bacon", "baking", "ball", "baseball", "bath", "bear", "begging",
   "bench", "bicycle", "bike", "birthday", "book", "brush", "bug", "bus",
@@ -65,6 +71,17 @@ const DEFAULT_WORDS = [
   "think", "thirteen", "thread", "three", "throne", "thumb", "thunder", "ticket",
   "tiger", "tissue", "tooth", "toothbrush", "trash", "tugboat", "turtle", "waffle",
   "wagon", "watching", "weather", "wish", "witch", "wolf", "yellow", "yes",
+  // consonant blends
+  "stop", "step", "stick", "stone", "storm",
+  "spin", "spot", "space", "speak", "speed", "spoon",
+  "blue", "black", "blank", "blast", "block", "bloom",
+  "green", "grab", "grape", "grass", "grill", "grin",
+  "tree", "track", "trade", "trail", "train", "truck",
+  "press", "print", "prize", "proud", "prank", "prep",
+  "frame", "free", "fresh", "front", "fruit",
+  "drum", "draw", "dream", "drink", "drop",
+  "swim", "swan", "sweep", "sweet", "swing", "sway",
+  "snake", "snap", "snack", "snail", "sneak", "snow",
 ];
 
 function getClinicianEmail() {
@@ -105,6 +122,7 @@ export default function ClinicianDashboardPage() {
   const [customWord, setCustomWord] = useState("");
   const [selectedWords, setSelectedWords] = useState<string[]>([]);
   const [practiceMode, setPracticeMode] = useState<"word" | "sentence">("word");
+  const [missingImageWords, setMissingImageWords] = useState<Set<string>>(new Set());
   const [sentenceText, setSentenceText] = useState("");
 
   const clinicianEmail = getClinicianEmail();
@@ -396,6 +414,36 @@ export default function ClinicianDashboardPage() {
                 </select>
               </div>
 
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#567", marginBottom: 8 }}>
+                  Quick pick a sound (matches Superhero Game)
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {SOUND_OPTIONS.map((sound) => {
+                    const label = `/${sound}/`;
+                    const isSelected = targetSound === label;
+                    return (
+                      <button
+                        key={sound}
+                        onClick={() => setTargetSound(label)}
+                        style={{
+                          padding: "8px 14px",
+                          borderRadius: 12,
+                          border: isSelected ? "2px solid #2fb8ae" : "1px solid #dbe7e6",
+                          background: isSelected ? "#dcfce7" : "#f8fbfb",
+                          color: "#163b3f",
+                          fontWeight: 700,
+                          fontSize: 14,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
                 <button
                   onClick={() => setPracticeMode("word")}
@@ -454,11 +502,20 @@ export default function ClinicianDashboardPage() {
                             width: 90,
                           }}
                         >
-                          <img
-                            src={`/Images/${word}.png`}
-                            alt={word}
-                            style={{ width: 60, height: 60, objectFit: "contain" }}
-                          />
+                          {missingImageWords.has(word) ? (
+                            <span style={{ fontSize: 40, lineHeight: "60px", height: 60 }}>
+                              {WORD_EMOJIS[word.toLowerCase()] || DEFAULT_WORD_EMOJI}
+                            </span>
+                          ) : (
+                            <img
+                              src={`/Images/${word}.png`}
+                              alt={word}
+                              style={{ width: 60, height: 60, objectFit: "contain" }}
+                              onError={() => {
+                                setMissingImageWords((prev) => new Set(prev).add(word));
+                              }}
+                            />
+                          )}
                           {word}
                         </button>
                       );
