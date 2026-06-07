@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 type GamePhase = "intro" | "playing" | "correct" | "wrong" | "complete";
 
@@ -175,6 +175,14 @@ export default function OceanGame() {
   const [showSplash, setShowSplash] = useState(false);
   const totalWords = 8;
 
+  // -- recording --
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const [micError, setMicError] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+
   const hero = SEA_CREATURES[heroIndex];
   const villain = OCEAN_VILLAINS[villainIndex];
 
@@ -230,6 +238,54 @@ export default function OceanGame() {
       else { setCurrentIndex(i => i + 1); setPhase("playing"); }
     }, 1000);
   }, [phase, currentIndex, totalWords]);
+
+  const startRecording = useCallback(async () => {
+    if (isRecording) return;
+    setMicError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      audioChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        setRecordingUrl(URL.createObjectURL(blob));
+        stream.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+    } catch {
+      setMicError("We need microphone access to record. Please allow the microphone permission in your browser, then try again.");
+    }
+  }, [isRecording]);
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+  }, []);
+
+  // reset recording when moving to a new word
+  useEffect(() => {
+    setRecordingUrl(null);
+    setIsRecording(false);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+  }, [currentIndex]);
+
+  // revoke the previous object URL whenever it changes or on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+    };
+  }, [recordingUrl]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -507,7 +563,94 @@ export default function OceanGame() {
 
           {phase === "correct" && <div style={{ fontSize: 24, marginTop: 8 }}>🎉 🌊 🐚</div>}
           {phase === "wrong" && <div style={{ fontSize: 24, marginTop: 8 }}>🫧</div>}
+
+          {phase === "playing" && (
+            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", fontStyle: "italic", marginTop: 10 }}>
+              💡 Did you hear the /{targetSound}/ sound clearly?
+            </div>
+          )}
         </div>
+
+        {/* RECORD & PLAYBACK */}
+        {phase === "playing" && currentCard && (
+          <div style={{ textAlign: "center", marginBottom: 16 }}>
+            <p style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", marginBottom: 12, fontWeight: 600 }}>
+              🎤 Record the word together, then play it back before scoring
+            </p>
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 20 }}>
+              <div style={{ position: "relative", display: "inline-flex" }}>
+                {isRecording && (
+                  <span style={{
+                    position: "absolute", inset: 0, borderRadius: "50%",
+                    background: "rgba(99,179,237,0.45)",
+                    animation: "pulseRing 1.2s ease-out infinite",
+                  }} />
+                )}
+                <button
+                  onMouseDown={startRecording}
+                  onMouseUp={stopRecording}
+                  onMouseLeave={() => { if (isRecording) stopRecording(); }}
+                  onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
+                  onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
+                  style={{
+                    position: "relative", width: 84, height: 84, borderRadius: "50%", border: "none",
+                    background: "linear-gradient(135deg, #1E3A8A, #3B82F6)",
+                    color: "white", fontSize: 32, cursor: "pointer",
+                    boxShadow: "0 6px 20px rgba(59,130,246,0.45)",
+                    transform: isRecording ? "scale(1.08)" : "scale(1)",
+                    transition: "transform 0.15s",
+                  }}
+                >
+                  🎤
+                </button>
+              </div>
+
+              {recordingUrl && !isRecording && (
+                <button
+                  onClick={() => { new Audio(recordingUrl).play(); }}
+                  style={{
+                    width: 84, height: 84, borderRadius: "50%", border: "none",
+                    background: "linear-gradient(135deg, #0E7490, #22D3EE)",
+                    color: "white", fontSize: 32, cursor: "pointer",
+                    boxShadow: "0 6px 20px rgba(34,211,238,0.4)",
+                  }}
+                >
+                  🔊
+                </button>
+              )}
+            </div>
+
+            {isRecording && (
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "flex-end", gap: 4, height: 28, marginTop: 14 }}>
+                {[0, 1, 2, 3, 4].map(i => (
+                  <div key={i} style={{
+                    width: 5, background: "#63B3ED", borderRadius: 3,
+                    animation: "waveBar 0.8s ease-in-out infinite",
+                    animationDelay: `${i * 0.12}s`,
+                  }} />
+                ))}
+              </div>
+            )}
+
+            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 12, fontWeight: 600 }}>
+              {isRecording
+                ? "🔵 Recording… let go to stop"
+                : recordingUrl
+                ? "Tap 🔊 to listen back together"
+                : "Press and hold 🎤 to record"}
+            </p>
+
+            {micError && (
+              <div style={{
+                marginTop: 12, padding: "10px 16px", borderRadius: 14, display: "inline-block",
+                background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.4)",
+                color: "#93C5FD", fontSize: 13, fontWeight: 600, maxWidth: 380,
+              }}>
+                🎤 {micError}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* WORD DOTS */}
         <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 14 }}>
@@ -563,6 +706,8 @@ export default function OceanGame() {
         @keyframes burst { 0% { transform: scale(0.5); opacity: 1; } 100% { transform: scale(2.5); opacity: 0; } }
         @keyframes floatUp { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(-60px); opacity: 0; } }
         @keyframes cardIn { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes pulseRing { 0% { transform: scale(0.9); opacity: 0.7; } 70% { transform: scale(1.6); opacity: 0; } 100% { transform: scale(1.6); opacity: 0; } }
+        @keyframes waveBar { 0%,100% { height: 8px; } 50% { height: 26px; } }
       `}</style>
     </div>
   );
