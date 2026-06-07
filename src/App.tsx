@@ -6,6 +6,7 @@ import ClinicianDashboardPage from "./pages/ClinicianDashboardPage";
 import PlayPage from "./pages/PlayPage";
 import RewardsShopPage from "./pages/RewardsShopPage";
 import SuperheroGame from "./pages/SuperheroGame";
+import OceanGame from "./pages/OceanGame";
 
 type UserRole = "parent" | "clinician" | "";
 
@@ -113,6 +114,10 @@ export default function App() {
 
   if (path === "/superhero-game") {
     return <SuperheroGame />;
+  }
+
+  if (path === "/ocean-game") {
+    return <OceanGame />;
   }
 
   if (path === "/play" || path === "/practice") {

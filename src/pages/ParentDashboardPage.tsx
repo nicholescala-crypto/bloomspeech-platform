@@ -399,6 +399,12 @@ export default function ParentDashboardPage() {
             🦸 Superhero Game
           </button>
           <button
+            onClick={() => { window.location.href = "/ocean-game"; }}
+            style={actionBtn("#0A3055", "white")}
+          >
+            Ocean Adventure 🌊
+          </button>
+          <button
             onClick={() => { window.location.href = "/rewards"; }}
             style={actionBtn("#f0fdf9", "#163b3f", "1px solid #a7f3d0")}
           >
