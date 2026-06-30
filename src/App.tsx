@@ -7,6 +7,7 @@ import PlayPage from "./pages/PlayPage";
 import RewardsShopPage from "./pages/RewardsShopPage";
 import SuperheroGame from "./pages/SuperheroGame";
 import OceanGame from "./pages/OceanGame";
+import AdventureGame from "./pages/AdventureGame";
 
 type UserRole = "parent" | "clinician" | "";
 
@@ -122,6 +123,10 @@ export default function App() {
 
   if (path === "/play" || path === "/practice") {
     return <PlayPage />;
+  }
+
+  if (path === "/adventure-game" || path === "/adventure" || path === "/word-quest") {
+    return <AdventureGame />;
   }
 
   if (path === "/rewards" || path === "/shop") {
