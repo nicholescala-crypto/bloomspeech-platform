@@ -396,19 +396,19 @@ export default function ParentDashboardPage() {
             onClick={() => { window.location.href = "/superhero-game"; }}
             style={actionBtn("#1e1b4b", "white")}
           >
-            🦸 Superhero Game
+            🦸 Superhero (free play)
           </button>
           <button
             onClick={() => { window.location.href = "/ocean-game"; }}
             style={actionBtn("#0A3055", "white")}
           >
-            Ocean Adventure 🌊
+            🌊 Ocean (free play)
           </button>
           <button
             onClick={() => { window.location.href = "/adventure-game"; }}
             style={actionBtn("#1ea65a", "white")}
           >
-            Word Quest 🗺️
+            🗺️ Word Quest (free play)
           </button>
           <button
             onClick={() => { window.location.href = "/rewards"; }}
@@ -499,6 +499,18 @@ export default function ParentDashboardPage() {
           const note = assignment.clinician_note || assignment.clinicianNote || "";
           const theme = getSoundTheme(sound);
           const stars = difficultyStars(difficulty);
+
+          // Every game launches with THIS child's assigned sound + words.
+          const gameQuery = new URLSearchParams({
+            sound: String(sound || "k"),
+            pos: String(position || "Initial"),
+            words: words.join(","),
+          }).toString();
+          const games = [
+            { label: "🗺️ Word Quest", route: "/adventure-game", bg: "linear-gradient(135deg,#27c06b,#1ea65a)" },
+            { label: "🦸 Superhero", route: "/superhero-game", bg: "linear-gradient(135deg,#2563EB,#7C3AED)" },
+            { label: "🌊 Ocean", route: "/ocean-game", bg: "linear-gradient(135deg,#2B6CB0,#4ECDC4)" },
+          ];
 
           return (
             <div key={assignment.id} style={{ ...card, padding: 0, overflow: "hidden", marginBottom: 20 }}>
@@ -647,39 +659,31 @@ export default function ParentDashboardPage() {
                 >
                   ▶ Play Practice Game
                 </button>
-                <button
-                  onClick={() => {
-                    const targetSound = assignment.target_sound || assignment.targetSound || "k";
-                    const targetPosition = assignment.target_position || assignment.targetPosition || "Initial";
-                    const assignmentWords =
-                      assignment.words ||
-                      assignment.selectedWords ||
-                      assignment.selected_words ||
-                      [];
-                    const params = new URLSearchParams({
-                      sound: String(targetSound),
-                      pos: String(targetPosition),
-                      words: assignmentWords.join(","),
-                    });
-                    window.location.href = `/adventure-game?${params.toString()}`;
-                  }}
-                  style={{
-                    width: "100%",
-                    marginTop: 10,
-                    padding: "15px 20px",
-                    border: "none",
-                    borderRadius: 14,
-                    background: "linear-gradient(135deg,#27c06b,#1ea65a)",
-                    color: "white",
-                    fontFamily: "'Nunito', sans-serif",
-                    fontSize: 16,
-                    fontWeight: 900,
-                    cursor: "pointer",
-                    boxShadow: "0 4px 14px rgba(0,0,0,0.18)",
-                  }}
-                >
-                  🗺️ Play Word Quest (these words)
-                </button>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#7c8aa0", margin: "14px 0 6px" }}>
+                  …or play these same words as a game:
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                  {games.map((g) => (
+                    <button
+                      key={g.route}
+                      onClick={() => { window.location.href = `${g.route}?${gameQuery}`; }}
+                      style={{
+                        padding: "12px 8px",
+                        border: "none",
+                        borderRadius: 14,
+                        background: g.bg,
+                        color: "white",
+                        fontFamily: "'Nunito', sans-serif",
+                        fontSize: 13,
+                        fontWeight: 900,
+                        cursor: "pointer",
+                        boxShadow: "0 4px 14px rgba(0,0,0,0.16)",
+                      }}
+                    >
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           );

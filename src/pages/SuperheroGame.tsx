@@ -1,5 +1,14 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { WORD_EMOJIS, DEFAULT_WORD_EMOJI } from "../games/data/wordEmojis";
+
+// Read the child's assigned sound + words from the URL (?sound=&words=).
+// When present, the game plays exactly those words instead of its own bank.
+function readAssigned() {
+  const p = new URLSearchParams(window.location.search);
+  const sound = (p.get("sound") || p.get("targetSound") || "").replace(/\//g, "").toLowerCase();
+  const words = (p.get("words") || "").split(",").map((w) => w.trim()).filter(Boolean);
+  return { sound, words };
+}
 
 // ── types ────────────────────────────────────────────────────────
 type GamePhase = "intro" | "playing" | "correct" | "wrong" | "victory" | "complete";
@@ -86,7 +95,8 @@ function PowerBar({ power, max }: { power: number; max: number }) {
 
 // ── main game component ──────────────────────────────────────────
 export default function SuperheroGame() {
-  const [targetSound, setTargetSound] = useState("r");
+  const assigned = useMemo(readAssigned, []);
+  const [targetSound, setTargetSound] = useState(assigned.sound || "r");
   const [heroIndex, setHeroIndex] = useState(0);
   const [villainIndex, setVillainIndex] = useState(0);
   const [phase, setPhase] = useState<GamePhase>("intro");
@@ -113,16 +123,16 @@ export default function SuperheroGame() {
   const villain = VILLAINS[villainIndex];
 
   const startGame = useCallback(() => {
-    const words = getWords(targetSound, totalWords);
+    const words = assigned.words.length ? assigned.words : getWords(targetSound, totalWords);
     setCards(words.map(w => ({ word: w, used: false, correct: null })));
     setCurrentIndex(0);
     setPower(0);
     setScore(0);
     setStreak(0);
     setBestStreak(0);
-    setVillainHp(totalWords);
+    setVillainHp(words.length);
     setPhase("playing");
-  }, [targetSound, totalWords]);
+  }, [targetSound, totalWords, assigned]);
 
   const markCorrect = useCallback(() => {
     if (phase !== "playing") return;
@@ -285,21 +295,28 @@ export default function SuperheroGame() {
             </div>
           </div>
 
-          {/* sound selector */}
-          <div style={{ marginBottom: 28 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Target sound</div>
-            <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-              {["r","s","l","ch","sh","th","k","g","f","v","st","sp","bl","gr","tr","pr","fr","dr","sw","sn"].map(s => (
-                <button key={s} onClick={() => setTargetSound(s)} style={{
-                  fontFamily: "Bangers, cursive", fontSize: 18, letterSpacing: 1,
-                  width: 44, height: 44, borderRadius: 12,
-                  background: targetSound === s ? "#2563EB" : "rgba(255,255,255,0.08)",
-                  border: targetSound === s ? "2px solid #60A5FA" : "2px solid rgba(255,255,255,0.15)",
-                  color: "white", cursor: "pointer", transition: "all 0.15s",
-                }}>/{s}/</button>
-              ))}
+          {/* sound selector — hidden when playing a child's assigned words */}
+          {assigned.words.length ? (
+            <div style={{ marginBottom: 28, padding: "12px 18px", borderRadius: 14, background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.35)" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Your assignment</div>
+              <div style={{ fontSize: 16, fontWeight: 800, marginTop: 4 }}>{assigned.words.length} words · /{targetSound}/</div>
             </div>
-          </div>
+          ) : (
+            <div style={{ marginBottom: 28 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Target sound</div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                {["r","s","l","ch","sh","th","k","g","f","v","st","sp","bl","gr","tr","pr","fr","dr","sw","sn"].map(s => (
+                  <button key={s} onClick={() => setTargetSound(s)} style={{
+                    fontFamily: "Bangers, cursive", fontSize: 18, letterSpacing: 1,
+                    width: 44, height: 44, borderRadius: 12,
+                    background: targetSound === s ? "#2563EB" : "rgba(255,255,255,0.08)",
+                    border: targetSound === s ? "2px solid #60A5FA" : "2px solid rgba(255,255,255,0.15)",
+                    color: "white", cursor: "pointer", transition: "all 0.15s",
+                  }}>/{s}/</button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <button onClick={startGame} style={{
             fontFamily: "Bangers, cursive", fontSize: 26, letterSpacing: 2,

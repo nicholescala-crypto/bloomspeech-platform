@@ -1,4 +1,13 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { WORD_EMOJIS, DEFAULT_WORD_EMOJI } from "../games/data/wordEmojis";
+
+// Read the child's assigned sound + words from the URL (?sound=&words=).
+function readAssigned() {
+  const p = new URLSearchParams(window.location.search);
+  const sound = (p.get("sound") || p.get("targetSound") || "").replace(/\//g, "").toLowerCase();
+  const words = (p.get("words") || "").split(",").map((w) => w.trim()).filter(Boolean);
+  return { sound, words };
+}
 
 type GamePhase = "intro" | "playing" | "correct" | "wrong" | "complete";
 
@@ -160,7 +169,8 @@ function BubbleBar({ value, max, color }: { value: number; max: number; color: s
 }
 
 export default function OceanGame() {
-  const [targetSound, setTargetSound] = useState("r");
+  const assigned = useMemo(readAssigned, []);
+  const [targetSound, setTargetSound] = useState(assigned.sound || "r");
   const [heroIndex, setHeroIndex] = useState(0);
   const [villainIndex, setVillainIndex] = useState(0);
   const [phase, setPhase] = useState<GamePhase>("intro");
@@ -197,15 +207,17 @@ export default function OceanGame() {
   };
 
   const startGame = useCallback(() => {
-    const words = getWords(targetSound, totalWords);
+    const words = assigned.words.length
+      ? assigned.words.map(w => ({ word: w, emoji: WORD_EMOJIS[w.toLowerCase()] || DEFAULT_WORD_EMOJI }))
+      : getWords(targetSound, totalWords);
     setCards(words.map(w => ({ word: w.word, emoji: w.emoji, used: false, correct: null })));
     setCurrentIndex(0);
     setScore(0);
     setStreak(0);
     setBestStreak(0);
-    setVillainHp(totalWords);
+    setVillainHp(words.length);
     setPhase("playing");
-  }, [targetSound]);
+  }, [targetSound, assigned]);
 
   const markCorrect = useCallback(() => {
     if (phase !== "playing") return;
@@ -356,21 +368,28 @@ export default function OceanGame() {
             </div>
           </div>
 
-          {/* sound picker */}
-          <div style={{ marginBottom: 28 }}>
-            <div style={pickerLabel}>Target sound</div>
-            <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
-              {Object.keys(WORD_BANKS).map(s => (
-                <button key={s} onClick={() => setTargetSound(s)} style={{
-                  fontFamily: "'Fredoka One', cursive", fontSize: 16,
-                  padding: "6px 12px", borderRadius: 10,
-                  background: targetSound === s ? "#2B6CB0" : "rgba(255,255,255,0.08)",
-                  border: targetSound === s ? "2px solid #63B3ED" : "2px solid rgba(255,255,255,0.12)",
-                  color: "white", cursor: "pointer", transition: "all 0.15s",
-                }}>/{s}/</button>
-              ))}
+          {/* sound picker — hidden when playing a child's assigned words */}
+          {assigned.words.length ? (
+            <div style={{ marginBottom: 28, padding: "12px 18px", borderRadius: 14, background: "rgba(99,179,237,0.12)", border: "1px solid rgba(99,179,237,0.35)" }}>
+              <div style={pickerLabel}>Your assignment</div>
+              <div style={{ fontSize: 16, fontWeight: 800, marginTop: 4 }}>{assigned.words.length} words · /{targetSound}/</div>
             </div>
-          </div>
+          ) : (
+            <div style={{ marginBottom: 28 }}>
+              <div style={pickerLabel}>Target sound</div>
+              <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
+                {Object.keys(WORD_BANKS).map(s => (
+                  <button key={s} onClick={() => setTargetSound(s)} style={{
+                    fontFamily: "'Fredoka One', cursive", fontSize: 16,
+                    padding: "6px 12px", borderRadius: 10,
+                    background: targetSound === s ? "#2B6CB0" : "rgba(255,255,255,0.08)",
+                    border: targetSound === s ? "2px solid #63B3ED" : "2px solid rgba(255,255,255,0.12)",
+                    color: "white", cursor: "pointer", transition: "all 0.15s",
+                  }}>/{s}/</button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <button onClick={startGame} style={{
             fontFamily: "'Fredoka One', cursive", fontSize: 24,
