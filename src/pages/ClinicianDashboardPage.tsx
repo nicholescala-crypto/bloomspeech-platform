@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase.ts";
 import { WORD_EMOJIS, DEFAULT_WORD_EMOJI } from "../games/data/wordEmojis";
+import { wordsForSound } from "../games/data/wordBank";
 type ChildProfile = {
   id: string;
   child_name: string;
@@ -126,6 +127,14 @@ export default function ClinicianDashboardPage() {
   const [sentenceText, setSentenceText] = useState("");
 
   const clinicianEmail = getClinicianEmail();
+
+  // Words shown in the picker: auto-filtered to the selected sound + position.
+  const gridWords = useMemo(() => {
+    if (difficulty === "Hard") return MULTISYLLABIC_WORDS;
+    const pos = targetPosition === "Mixed" ? undefined : targetPosition;
+    const filtered = wordsForSound(targetSound, pos);
+    return filtered.length ? filtered : DEFAULT_WORDS;
+  }, [difficulty, targetSound, targetPosition]);
 
   useEffect(() => {
     loadData();
@@ -476,9 +485,14 @@ export default function ClinicianDashboardPage() {
                         Multisyllabic words
                       </span>
                     )}
+                    {difficulty !== "Hard" && (
+                      <span style={{ fontSize: 13, fontWeight: 500, color: "#2fb8ae", marginLeft: 10 }}>
+                        {gridWords.length} {targetSound} {targetPosition !== "Mixed" ? targetPosition.toLowerCase() : ""} words
+                      </span>
+                    )}
                   </h3>
                   <div style={wordGridStyle}>
-                    {(difficulty === "Hard" ? MULTISYLLABIC_WORDS : DEFAULT_WORDS).map((word) => {
+                    {gridWords.map((word) => {
                       const isSelected = selectedWords.includes(word);
                       return (
                         <button
