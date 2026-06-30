@@ -490,6 +490,7 @@ export default function ParentDashboardPage() {
           }).toString();
           const games = [
             { label: "🗺️ Word Quest", route: "/adventure-game", bg: "linear-gradient(135deg,#27c06b,#1ea65a)" },
+            { label: "🚀 Star Mission", route: "/space-game", bg: "linear-gradient(135deg,#3b82d6,#7c3aed)" },
             { label: "🦸 Superhero", route: "/superhero-game", bg: "linear-gradient(135deg,#2563EB,#7C3AED)" },
             { label: "🌊 Ocean", route: "/ocean-game", bg: "linear-gradient(135deg,#2B6CB0,#4ECDC4)" },
           ];
@@ -644,7 +645,7 @@ export default function ParentDashboardPage() {
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#7c8aa0", margin: "14px 0 6px" }}>
                   …or play these same words as a game:
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                   {games.map((g) => (
                     <button
                       key={g.route}

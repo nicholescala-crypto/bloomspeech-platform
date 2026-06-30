@@ -8,6 +8,7 @@ import RewardsShopPage from "./pages/RewardsShopPage";
 import SuperheroGame from "./pages/SuperheroGame";
 import OceanGame from "./pages/OceanGame";
 import AdventureGame from "./pages/AdventureGame";
+import SpaceGame from "./pages/SpaceGame";
 
 type UserRole = "parent" | "clinician" | "";
 
@@ -127,6 +128,10 @@ export default function App() {
 
   if (path === "/adventure-game" || path === "/adventure" || path === "/word-quest") {
     return <AdventureGame />;
+  }
+
+  if (path === "/space-game" || path === "/space" || path === "/star-words") {
+    return <SpaceGame />;
   }
 
   if (path === "/rewards" || path === "/shop") {
