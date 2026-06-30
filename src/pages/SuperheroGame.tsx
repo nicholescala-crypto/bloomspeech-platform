@@ -242,6 +242,22 @@ export default function SuperheroGame() {
   const currentCard = cards[currentIndex];
   const progressPct = Math.round((currentIndex / totalWords) * 100);
 
+  // ── NO HOMEWORK LOADED ───────────────────────────────────────
+  // This game must be opened from a child's assignment card so it plays
+  // the assigned words (never random ones).
+  if (!assigned.words.length) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, background: "linear-gradient(160deg,#0b1530,#1e1b4b)", color: "white", fontFamily: "'Nunito',system-ui,sans-serif", textAlign: "center", padding: 24 }}>
+        <div style={{ fontSize: 60 }}>🦸</div>
+        <h1 style={{ fontSize: 24, margin: 0 }}>No homework loaded</h1>
+        <p style={{ maxWidth: 340, opacity: 0.8, lineHeight: 1.5 }}>Open your child’s practice card and tap a game there — it will play the exact words their therapist assigned.</p>
+        <button onClick={() => { window.location.href = "/parent"; }} style={{ padding: "14px 28px", borderRadius: 16, border: "none", background: "linear-gradient(135deg,#2563EB,#7C3AED)", color: "white", fontSize: 16, fontWeight: 900, cursor: "pointer" }}>
+          ← Back to my child’s card
+        </button>
+      </div>
+    );
+  }
+
   // ── INTRO SCREEN ─────────────────────────────────────────────
   if (phase === "intro") {
     return (

@@ -393,24 +393,6 @@ export default function ParentDashboardPage() {
             Practice Guide
           </button>
           <button
-            onClick={() => { window.location.href = "/superhero-game"; }}
-            style={actionBtn("#1e1b4b", "white")}
-          >
-            🦸 Superhero (free play)
-          </button>
-          <button
-            onClick={() => { window.location.href = "/ocean-game"; }}
-            style={actionBtn("#0A3055", "white")}
-          >
-            🌊 Ocean (free play)
-          </button>
-          <button
-            onClick={() => { window.location.href = "/adventure-game"; }}
-            style={actionBtn("#1ea65a", "white")}
-          >
-            🗺️ Word Quest (free play)
-          </button>
-          <button
             onClick={() => { window.location.href = "/rewards"; }}
             style={actionBtn("#f0fdf9", "#163b3f", "1px solid #a7f3d0")}
           >

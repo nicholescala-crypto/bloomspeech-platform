@@ -166,6 +166,22 @@ export default function AdventureGame() {
     </div>
   );
 
+  // Must be opened from a child's assignment card so it plays the assigned words.
+  if (!params.wordsParam.length) {
+    return (
+      <div style={{ ...page, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ ...wrap, textAlign: "center" }}>
+          <div style={{ fontSize: 60 }}>🗺️</div>
+          <h1 style={{ fontSize: 24, margin: "10px 0" }}>No homework loaded</h1>
+          <p style={{ maxWidth: 340, margin: "0 auto 18px", opacity: 0.85, lineHeight: 1.5 }}>Open your child’s practice card and tap a game there — it will play the exact words their therapist assigned.</p>
+          <button onClick={() => { window.location.href = "/parent"; }} style={{ padding: "14px 28px", borderRadius: 16, border: "none", background: "linear-gradient(135deg,#27c06b,#1ea65a)", color: "white", fontSize: 16, fontWeight: 900, cursor: "pointer" }}>
+            ← Back to my child’s card
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (phase === "intro") {
     return (
       <div style={page}><div style={wrap}>

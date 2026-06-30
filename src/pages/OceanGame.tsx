@@ -313,6 +313,22 @@ export default function OceanGame() {
   const currentCard = cards[currentIndex];
   const stars = accuracy >= totalWords ? 3 : accuracy >= Math.ceil(totalWords * 0.7) ? 2 : 1;
 
+  // -- NO HOMEWORK LOADED -------------------------------------------
+  // Must be opened from a child's assignment card so it plays the
+  // assigned words (never random ones).
+  if (!assigned.words.length) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, background: "linear-gradient(160deg,#0A3055,#2B6CB0)", color: "white", fontFamily: "'Nunito',system-ui,sans-serif", textAlign: "center", padding: 24 }}>
+        <div style={{ fontSize: 60 }}>🌊</div>
+        <h1 style={{ fontSize: 24, margin: 0 }}>No homework loaded</h1>
+        <p style={{ maxWidth: 340, opacity: 0.85, lineHeight: 1.5 }}>Open your child’s practice card and tap a game there — it will play the exact words their therapist assigned.</p>
+        <button onClick={() => { window.location.href = "/parent"; }} style={{ padding: "14px 28px", borderRadius: 16, border: "none", background: "linear-gradient(135deg,#2B6CB0,#4ECDC4)", color: "white", fontSize: 16, fontWeight: 900, cursor: "pointer" }}>
+          ← Back to my child’s card
+        </button>
+      </div>
+    );
+  }
+
   // -- INTRO --------------------------------------------------------
   if (phase === "intro") {
     return (
