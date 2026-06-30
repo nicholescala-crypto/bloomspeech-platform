@@ -647,6 +647,39 @@ export default function ParentDashboardPage() {
                 >
                   ▶ Play Practice Game
                 </button>
+                <button
+                  onClick={() => {
+                    const targetSound = assignment.target_sound || assignment.targetSound || "k";
+                    const targetPosition = assignment.target_position || assignment.targetPosition || "Initial";
+                    const assignmentWords =
+                      assignment.words ||
+                      assignment.selectedWords ||
+                      assignment.selected_words ||
+                      [];
+                    const params = new URLSearchParams({
+                      sound: String(targetSound),
+                      pos: String(targetPosition),
+                      words: assignmentWords.join(","),
+                    });
+                    window.location.href = `/adventure-game?${params.toString()}`;
+                  }}
+                  style={{
+                    width: "100%",
+                    marginTop: 10,
+                    padding: "15px 20px",
+                    border: "none",
+                    borderRadius: 14,
+                    background: "linear-gradient(135deg,#27c06b,#1ea65a)",
+                    color: "white",
+                    fontFamily: "'Nunito', sans-serif",
+                    fontSize: 16,
+                    fontWeight: 900,
+                    cursor: "pointer",
+                    boxShadow: "0 4px 14px rgba(0,0,0,0.18)",
+                  }}
+                >
+                  🗺️ Play Word Quest (these words)
+                </button>
               </div>
             </div>
           );

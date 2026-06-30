@@ -28,6 +28,10 @@ const MINIS = [
   { key: "monster", icon: "👾", title: "Feed the Monster", action: "Feed it!", reward: "🍬", verb: "feed the monster" },
   { key: "dig", icon: "⛏️", title: "Treasure Dig", action: "Dig it up!", reward: "💎", verb: "dig up the treasure" },
   { key: "rocket", icon: "🚀", title: "Blast Off", action: "Launch!", reward: "⭐", verb: "launch the rocket" },
+  { key: "fish", icon: "🎣", title: "Reel It In", action: "Reel it in!", reward: "🐟", verb: "reel in the catch" },
+  { key: "hoop", icon: "🏀", title: "Hoop Shot", action: "Shoot!", reward: "🏀", verb: "sink the basket" },
+  { key: "balloon", icon: "🎈", title: "Balloon Float", action: "Let it go!", reward: "🎈", verb: "float the balloon away" },
+  { key: "paint", icon: "🎨", title: "Paint Splash", action: "Splash!", reward: "🌈", verb: "splash the paint off" },
 ] as const;
 
 const CSS = `
@@ -40,6 +44,9 @@ const CSS = `
 @keyframes wq-spark {0%{transform:translateY(0) scale(0);opacity:1}100%{transform:translateY(-70px) scale(1.3);opacity:0}}
 @keyframes wq-pulse {0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
 @keyframes wq-shake {0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+@keyframes wq-reel {0%{transform:translateY(0) rotate(0)}100%{transform:translateY(-250px) rotate(10deg);opacity:0}}
+@keyframes wq-hoop {0%{transform:translate(0,0) scale(1)}45%{transform:translate(34px,-150px) scale(.7)}100%{transform:translate(70px,30px) scale(.45);opacity:0}}
+@keyframes wq-float {0%{transform:translateY(0) translateX(0) scale(1)}100%{transform:translateY(-380px) translateX(34px) scale(.7);opacity:0}}
 `;
 
 function readParams() {
@@ -291,6 +298,40 @@ export default function AdventureGame() {
               <div onClick={play} style={{ cursor: fx ? "default" : "pointer", textAlign: "center", animation: fx ? "wq-launch 1s ease-in forwards" : "wq-bob 2.6s ease-in-out infinite" }}>
                 <div style={{ width: 150, height: 150, margin: "0 auto", borderRadius: "50% 50% 45% 45%", background: "linear-gradient(180deg,#eef4ff,#cdddf2)", border: "4px solid #b3c6e0", display: "flex", alignItems: "center", justifyContent: "center" }}><WordImage word={curWord} size={104} /></div>
                 <div style={{ fontSize: 34, marginTop: -6 }}>{fx ? "🔥" : "🚀"}</div>
+              </div>
+            )}
+            {/* FISH */}
+            {mini.key === "fish" && (
+              <div onClick={play} style={{ cursor: fx ? "default" : "pointer", textAlign: "center" }}>
+                <div style={{ fontSize: 30 }}>🎣</div>
+                <div style={{ width: 2, height: 26, background: "#94a3b8", margin: "0 auto" }} />
+                <div style={{ animation: fx ? "wq-reel .9s ease-in forwards" : "wq-bob 2.4s ease-in-out infinite" }}>
+                  <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 152, height: 152, borderRadius: 22, background: "radial-gradient(circle at 40% 30%, rgba(127,212,255,.4), rgba(59,130,214,.18))", border: "2px solid rgba(127,212,255,.6)" }}><WordImage word={curWord} size={110} /></div>
+                </div>
+              </div>
+            )}
+            {/* HOOP */}
+            {mini.key === "hoop" && (
+              <div onClick={play} style={{ cursor: fx ? "default" : "pointer", position: "relative", width: 220, height: 210 }}>
+                <div style={{ position: "absolute", top: 4, left: "50%", transform: "translateX(-28px)", width: 56, height: 16, borderRadius: "50%", border: "5px solid #e8723c", boxShadow: "0 4px 8px rgba(0,0,0,.12)" }} />
+                <div style={{ position: "absolute", bottom: 6, left: "50%", transform: "translateX(-56px)", animation: fx ? "wq-hoop 1s ease-in forwards" : "wq-pulse 2s ease-in-out infinite" }}>
+                  <div style={{ width: 112, height: 112, borderRadius: "50%", overflow: "hidden", border: "3px solid #e8723c", display: "flex", alignItems: "center", justifyContent: "center", background: "#fff" }}><WordImage word={curWord} size={96} /></div>
+                </div>
+              </div>
+            )}
+            {/* BALLOON */}
+            {mini.key === "balloon" && (
+              <div onClick={play} style={{ cursor: fx ? "default" : "pointer", textAlign: "center", animation: fx ? "wq-float 1s ease-in forwards" : "wq-bob 2.6s ease-in-out infinite" }}>
+                <div style={{ width: 160, height: 174, margin: "0 auto", borderRadius: "50% 50% 48% 48%", background: "radial-gradient(circle at 38% 28%, #ffd3df, #ff7aa0 72%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 8px 22px rgba(255,122,160,.32)" }}><WordImage word={curWord} size={104} /></div>
+                <div style={{ width: 2, height: 30, background: "#cbd5e1", margin: "0 auto" }} />
+              </div>
+            )}
+            {/* PAINT */}
+            {mini.key === "paint" && (
+              <div onClick={play} style={{ cursor: fx ? "default" : "pointer", position: "relative", width: 200, height: 180 }}>
+                <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", animation: fx ? "wq-reveal .6s ease-out forwards" : "none", opacity: fx ? 1 : 0 }}><WordImage word={curWord} size={130} /></div>
+                {!fx && <div style={{ position: "absolute", inset: 0, borderRadius: 18, background: "conic-gradient(#ef4444,#f59e0b,#22c55e,#3b82f6,#a855f7,#ef4444)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 56 }}>🎨</div>}
+                {fx && <span style={{ position: "absolute", top: -6, right: 8, fontSize: 40, animation: "wq-reveal .6s ease-out" }}>🌈</span>}
               </div>
             )}
             {fx && sparks}
