@@ -169,6 +169,14 @@ function BubbleBar({ value, max, color }: { value: number; max: number; color: s
   );
 }
 
+// Real photo for a word (/Images/<word>.png) with emoji fallback.
+function WordImage({ word, size }: { word: string; size: number }) {
+  const [err, setErr] = useState(false);
+  useEffect(() => setErr(false), [word]);
+  if (err) return <span style={{ fontSize: size * 0.9, lineHeight: 1 }}>{WORD_EMOJIS[word.toLowerCase()] || DEFAULT_WORD_EMOJI}</span>;
+  return <img src={`/Images/${word}.png`} alt={word} onError={() => setErr(true)} style={{ width: size, height: size, objectFit: "contain", borderRadius: 16, background: "rgba(255,255,255,0.92)" }} />;
+}
+
 export default function OceanGame() {
   const assigned = useMemo(readAssigned, []);
   const [targetSound, setTargetSound] = useState(assigned.sound || "r");
@@ -590,8 +598,8 @@ export default function OceanGame() {
 
           {currentCard && (
             <>
-              <div style={{ fontSize: 56, marginBottom: 6, animation: phase === "playing" ? "cardIn 0.3s ease" : undefined }}>
-                {currentCard.emoji}
+              <div style={{ marginBottom: 8, display: "flex", justifyContent: "center", animation: phase === "playing" ? "cardIn 0.3s ease" : undefined }}>
+                <WordImage word={currentCard.word} size={120} />
               </div>
               <div style={{
                 fontFamily: "'Fredoka One', cursive",
