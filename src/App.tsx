@@ -11,6 +11,7 @@ import AdventureGame from "./pages/AdventureGame";
 import SpaceGame from "./pages/SpaceGame";
 import PizzaGame from "./pages/PizzaGame";
 import TowerGame from "./pages/TowerGame";
+import GardenGame from "./pages/GardenGame";
 
 type UserRole = "parent" | "clinician" | "";
 
@@ -142,6 +143,10 @@ export default function App() {
 
   if (path === "/tower-game" || path === "/tower" || path === "/word-tower") {
     return <TowerGame />;
+  }
+
+  if (path === "/garden-game" || path === "/garden" || path === "/bloom-garden") {
+    return <GardenGame />;
   }
 
   if (path === "/rewards" || path === "/shop") {

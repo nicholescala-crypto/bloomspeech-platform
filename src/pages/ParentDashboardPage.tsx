@@ -493,6 +493,7 @@ export default function ParentDashboardPage() {
             { label: "🚀 Star Mission", route: "/space-game", bg: "linear-gradient(135deg,#3b82d6,#7c3aed)" },
             { label: "🍕 Bloom Pizza", route: "/pizza-game", bg: "linear-gradient(135deg,#e8723c,#c8521f)" },
             { label: "🏗️ Word Tower", route: "/tower-game", bg: "linear-gradient(135deg,#3f96b0,#2b6f86)" },
+            { label: "🌻 Bloom Garden", route: "/garden-game", bg: "linear-gradient(135deg,#5bbf5b,#3f9d4a)" },
             { label: "🦸 Superhero", route: "/superhero-game", bg: "linear-gradient(135deg,#2563EB,#7C3AED)" },
             { label: "🌊 Ocean", route: "/ocean-game", bg: "linear-gradient(135deg,#2B6CB0,#4ECDC4)" },
           ];
