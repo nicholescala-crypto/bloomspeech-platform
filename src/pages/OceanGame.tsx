@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { WORD_EMOJIS, DEFAULT_WORD_EMOJI } from "../games/data/wordEmojis";
+import { speak, sfx, unlockAudio } from "../games/audio";
 
 // Read the child's assigned sound + words from the URL (?sound=&words=).
 function readAssigned() {
@@ -207,6 +208,7 @@ export default function OceanGame() {
   };
 
   const startGame = useCallback(() => {
+    unlockAudio();
     const words = assigned.words.length
       ? assigned.words.map(w => ({ word: w, emoji: WORD_EMOJIS[w.toLowerCase()] || DEFAULT_WORD_EMOJI }))
       : getWords(targetSound, totalWords);
@@ -221,6 +223,7 @@ export default function OceanGame() {
 
   const markCorrect = useCallback(() => {
     if (phase !== "playing") return;
+    sfx("success");
     const newStreak = streak + 1;
     const bonus = newStreak >= 3 ? 2 : 1;
     setStreak(newStreak);
@@ -240,6 +243,7 @@ export default function OceanGame() {
 
   const markWrong = useCallback(() => {
     if (phase !== "playing") return;
+    sfx("fail");
     setStreak(0);
     setShake(true);
     setTimeout(() => setShake(false), 500);
@@ -250,6 +254,9 @@ export default function OceanGame() {
       else { setCurrentIndex(i => i + 1); setPhase("playing"); }
     }, 1000);
   }, [phase, currentIndex, totalWords]);
+
+  useEffect(() => { const w = cards[currentIndex]?.word; if (phase === "playing" && w) speak(w); }, [currentIndex, phase, cards]);
+  useEffect(() => { if (phase === "complete") sfx("win"); }, [phase]);
 
   const startRecording = useCallback(async () => {
     if (isRecording) return;
@@ -599,6 +606,9 @@ export default function OceanGame() {
           {phase === "correct" && <div style={{ fontSize: 24, marginTop: 8 }}>🎉 🌊 🐚</div>}
           {phase === "wrong" && <div style={{ fontSize: 24, marginTop: 8 }}>🫧</div>}
 
+          {phase === "playing" && currentCard && (
+            <button onClick={() => speak(currentCard.word)} style={{ marginTop: 10, background: "rgba(255,255,255,0.14)", border: "2px solid rgba(255,255,255,0.3)", color: "#fff", borderRadius: 12, padding: "8px 16px", fontWeight: 800, cursor: "pointer", fontSize: 14 }}>🔊 Hear it</button>
+          )}
           {phase === "playing" && (
             <div style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", fontStyle: "italic", marginTop: 10 }}>
               💡 Did you hear the /{targetSound}/ sound clearly?

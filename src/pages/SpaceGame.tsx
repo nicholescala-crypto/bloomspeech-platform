@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { WORD_EMOJIS, DEFAULT_WORD_EMOJI } from "../games/data/wordEmojis";
+import { speak, sfx, unlockAudio } from "../games/audio";
 
 type Phase = "intro" | "playing" | "warp" | "won";
 
@@ -115,6 +116,7 @@ export default function SpaceGame() {
   const planet = PLANETS[planetIdx] || PLANETS[0];
 
   function start() {
+    unlockAudio();
     setJourney(buildJourney(params.wordsParam));
     setPlanetIdx(0); setStopIdx(0); setStars(0); setTries(0); setFx(false);
     setRecordingUrl(null);
@@ -136,9 +138,14 @@ export default function SpaceGame() {
 
   function play() {
     if (fx) return;
+    sfx("success");
     setFx(true);
     window.setTimeout(() => advance(true), 1000);
   }
+
+  // speak the target word aloud each time a new one appears (model to imitate)
+  useEffect(() => { if (phase === "playing" && curWord) speak(curWord); }, [curWord, phase]);
+  useEffect(() => { if (phase === "won") sfx("win"); else if (phase === "warp") sfx("level"); }, [phase]);
 
   // warp travel animation between planets
   useEffect(() => {
@@ -329,6 +336,7 @@ export default function SpaceGame() {
 
           {/* record (optional) */}
           <div style={{ marginTop: 12, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+            <button onClick={() => speak(curWord)} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.25)", color: "#fff", borderRadius: 12, padding: "8px 14px", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>🔊 Hear it</button>
             {!isRecording ? (
               <button onClick={startRec} style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.25)", color: "#fff", borderRadius: 12, padding: "8px 14px", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>🎤 Record</button>
             ) : (
@@ -344,7 +352,7 @@ export default function SpaceGame() {
           <button onClick={play} disabled={fx} style={{ padding: "18px 12px", borderRadius: 16, border: "none", background: "linear-gradient(135deg,#27c06b,#1ea65a)", color: "white", fontSize: 18, fontWeight: 900, cursor: fx ? "default" : "pointer", opacity: fx ? 0.7 : 1 }}>
             {task.reward} Got it! <span style={{ opacity: 0.7, fontSize: 13 }}>(G)</span>
           </button>
-          <button onClick={() => advance(false)} disabled={fx} style={{ padding: "18px 12px", borderRadius: 16, border: "none", background: "rgba(255,255,255,0.12)", color: "white", fontSize: 18, fontWeight: 900, cursor: fx ? "default" : "pointer" }}>
+          <button onClick={() => { sfx("fail"); advance(false); }} disabled={fx} style={{ padding: "18px 12px", borderRadius: 16, border: "none", background: "rgba(255,255,255,0.12)", color: "white", fontSize: 18, fontWeight: 900, cursor: fx ? "default" : "pointer" }}>
             Not yet ▶ <span style={{ opacity: 0.7, fontSize: 13 }}>(N)</span>
           </button>
         </div>

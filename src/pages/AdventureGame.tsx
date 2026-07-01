@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { wordsForSound, WORD_BANK_SOUNDS } from "../games/data/wordBank";
 import { WORD_EMOJIS, DEFAULT_WORD_EMOJI } from "../games/data/wordEmojis";
+import { speak, sfx, unlockAudio } from "../games/audio";
 
 // ---------------------------------------------------------------------------
 // Word Quest — a leveled adventure where every word is a different MINI-GAME.
@@ -95,6 +96,7 @@ export default function AdventureGame() {
   const chunksRef = useRef<BlobPart[]>([]);
 
   function start() {
+    unlockAudio();
     let words = params.wordsParam.length ? params.wordsParam.slice(0, WORDS_PER_LEVEL * MAX_LEVELS) : buildWords(sound, pos);
     if (!words.length) words = ["star", "sun", "rain", "rope"];
     setLevels(chunk(words, WORDS_PER_LEVEL));
@@ -137,10 +139,14 @@ export default function AdventureGame() {
   }
   function play() { // tap the toy = "got it" with a fun animation
     if (fx) return;
+    sfx("success");
     setFx(true);
     window.setTimeout(() => advance(true), 1050);
   }
   function nextLevel() { setLevel(level + 1); setWordIdx(0); setPhase("playing"); }
+
+  useEffect(() => { if (phase === "playing" && curWord) speak(curWord); }, [curWord, phase]);
+  useEffect(() => { if (phase === "won") sfx("win"); else if (phase === "levelDone") sfx("level"); }, [phase]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -356,6 +362,8 @@ export default function AdventureGame() {
           <div style={{ fontSize: 40, fontWeight: 900, lineHeight: 1, textTransform: "lowercase" }}>{curWord}</div>
           <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700, marginTop: 4 }}>Word {wordIdx + 1} of {curWords.length} · Camp {level + 1}</div>
 
+          <button onClick={() => speak(curWord)} style={{ marginTop: 8, border: "2px solid #d7e6fa", background: "#eef5ff", color: "#2f6fb0", borderRadius: 12, padding: "8px 16px", fontWeight: 800, cursor: "pointer", fontFamily: "inherit", fontSize: 14 }}>🔊 Hear it</button>
+
           {/* mic */}
           <div style={{ marginTop: 12 }}>
             <button onMouseDown={startRec} onMouseUp={stopRec} onMouseLeave={() => isRecording && stopRec()} onTouchStart={(e) => { e.preventDefault(); startRec(); }} onTouchEnd={(e) => { e.preventDefault(); stopRec(); }}
@@ -369,7 +377,7 @@ export default function AdventureGame() {
         {/* action buttons */}
         <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
           <button onClick={play} disabled={fx} style={{ ...bigBtn, background: "linear-gradient(135deg,#f5b820,#e09b00)", color: "#13314f", opacity: fx ? 0.7 : 1 }}>{mini.icon} {mini.action} <span style={{ opacity: .7, fontSize: 13 }}>(G)</span></button>
-          <button onClick={() => advance(false)} disabled={fx} style={{ ...bigBtn, flex: "0 0 130px", background: "rgba(255,255,255,0.14)", color: "#fff", fontSize: 15 }}>Not yet ▶ <span style={{ opacity: .7, fontSize: 12 }}>(N)</span></button>
+          <button onClick={() => { sfx("fail"); advance(false); }} disabled={fx} style={{ ...bigBtn, flex: "0 0 130px", background: "rgba(255,255,255,0.14)", color: "#fff", fontSize: 15 }}>Not yet ▶ <span style={{ opacity: .7, fontSize: 12 }}>(N)</span></button>
         </div>
         <p style={{ textAlign: "center", color: "#bfe0ff", fontSize: 12, fontWeight: 700, marginTop: 10 }}>
           Say <b>{curWord}</b>, record &amp; play it back, then tap the {mini.icon} to {mini.verb}!

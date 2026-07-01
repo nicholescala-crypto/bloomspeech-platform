@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { WORD_EMOJIS, DEFAULT_WORD_EMOJI } from "../games/data/wordEmojis";
+import { speak, sfx, unlockAudio } from "../games/audio";
 
 // Read the child's assigned sound + words from the URL (?sound=&words=).
 // When present, the game plays exactly those words instead of its own bank.
@@ -123,6 +124,7 @@ export default function SuperheroGame() {
   const villain = VILLAINS[villainIndex];
 
   const startGame = useCallback(() => {
+    unlockAudio();
     const words = assigned.words.length ? assigned.words : getWords(targetSound, totalWords);
     setCards(words.map(w => ({ word: w, used: false, correct: null })));
     setCurrentIndex(0);
@@ -136,6 +138,7 @@ export default function SuperheroGame() {
 
   const markCorrect = useCallback(() => {
     if (phase !== "playing") return;
+    sfx("success");
     const newStreak = streak + 1;
     const newScore = score + (newStreak >= 3 ? 2 : 1);
     const newPower = Math.min(power + (newStreak >= 3 ? 2 : 1), totalWords);
@@ -164,6 +167,7 @@ export default function SuperheroGame() {
 
   const markWrong = useCallback(() => {
     if (phase !== "playing") return;
+    sfx("fail");
     setStreak(0);
     setShake(true);
     setTimeout(() => setShake(false), 500);
@@ -179,6 +183,9 @@ export default function SuperheroGame() {
       }
     }, 900);
   }, [phase, currentIndex, totalWords]);
+
+  useEffect(() => { const w = cards[currentIndex]?.word; if (phase === "playing" && w) speak(w); }, [currentIndex, phase, cards]);
+  useEffect(() => { if (phase === "victory" || phase === "complete") sfx("win"); }, [phase]);
 
   const startRecording = useCallback(async () => {
     if (isRecording) return;
@@ -540,6 +547,9 @@ export default function SuperheroGame() {
               }}>
                 {currentCard.word}
               </div>
+              {phase === "playing" && (
+                <button onClick={() => speak(currentCard.word)} style={{ marginTop: 10, background: "rgba(255,255,255,0.12)", border: "2px solid rgba(255,255,255,0.3)", color: "#fff", borderRadius: 12, padding: "8px 16px", fontWeight: 800, cursor: "pointer", fontSize: 14 }}>🔊 Hear it</button>
+              )}
               {phase === "playing" && (
                 <div style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", fontStyle: "italic", marginTop: 10 }}>
                   💡 Listen — did you hear the /{targetSound}/ sound clearly?
