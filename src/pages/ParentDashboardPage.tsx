@@ -491,6 +491,7 @@ export default function ParentDashboardPage() {
           const games = [
             { label: "🗺️ Word Quest", route: "/adventure-game", bg: "linear-gradient(135deg,#27c06b,#1ea65a)" },
             { label: "🚀 Star Mission", route: "/space-game", bg: "linear-gradient(135deg,#3b82d6,#7c3aed)" },
+            { label: "🍕 Bloom Pizza", route: "/pizza-game", bg: "linear-gradient(135deg,#e8723c,#c8521f)" },
             { label: "🦸 Superhero", route: "/superhero-game", bg: "linear-gradient(135deg,#2563EB,#7C3AED)" },
             { label: "🌊 Ocean", route: "/ocean-game", bg: "linear-gradient(135deg,#2B6CB0,#4ECDC4)" },
           ];
