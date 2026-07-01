@@ -94,6 +94,14 @@ function PowerBar({ power, max }: { power: number; max: number }) {
   );
 }
 
+// Real photo for a word (/Images/<word>.png) with emoji fallback.
+function WordImage({ word, size }: { word: string; size: number }) {
+  const [err, setErr] = useState(false);
+  useEffect(() => setErr(false), [word]);
+  if (err) return <span style={{ fontSize: size * 0.9, lineHeight: 1 }}>{WORD_EMOJIS[word.toLowerCase()] || DEFAULT_WORD_EMOJI}</span>;
+  return <img src={`/Images/${word}.png`} alt={word} onError={() => setErr(true)} style={{ width: size, height: size, objectFit: "contain", borderRadius: 16, background: "rgba(255,255,255,0.92)" }} />;
+}
+
 // ── main game component ──────────────────────────────────────────
 export default function SuperheroGame() {
   const assigned = useMemo(readAssigned, []);
@@ -535,8 +543,8 @@ export default function SuperheroGame() {
 
           {currentCard && (
             <div style={{ animation: phase === "playing" ? "cardIn 0.3s ease" : undefined }}>
-              <div style={{ fontSize: 56, lineHeight: 1, marginBottom: 4 }}>
-                {WORD_EMOJIS[currentCard.word.toLowerCase()] || DEFAULT_WORD_EMOJI}
+              <div style={{ marginBottom: 8, display: "flex", justifyContent: "center" }}>
+                <WordImage word={currentCard.word} size={120} />
               </div>
               <div style={{
                 fontFamily: "Bangers, cursive",
