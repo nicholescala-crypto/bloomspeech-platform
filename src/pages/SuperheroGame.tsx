@@ -141,7 +141,7 @@ export default function SuperheroGame() {
     sfx("success");
     const newStreak = streak + 1;
     const newScore = score + (newStreak >= 3 ? 2 : 1);
-    const newPower = Math.min(power + (newStreak >= 3 ? 2 : 1), totalWords);
+    const newPower = Math.min(power + (newStreak >= 3 ? 2 : 1), cards.length);
     const newHp = Math.max(villainHp - 1, 0);
 
     setStreak(newStreak);
@@ -156,14 +156,14 @@ export default function SuperheroGame() {
     setPhase("correct");
 
     setTimeout(() => {
-      if (currentIndex + 1 >= totalWords) {
+      if (currentIndex + 1 >= cards.length) {
         setPhase(newHp <= 0 ? "victory" : "complete");
       } else {
         setCurrentIndex(i => i + 1);
         setPhase("playing");
       }
     }, 900);
-  }, [phase, streak, score, power, villainHp, currentIndex, totalWords, bestStreak]);
+  }, [phase, streak, score, power, villainHp, currentIndex, cards, bestStreak]);
 
   const markWrong = useCallback(() => {
     if (phase !== "playing") return;
@@ -175,14 +175,14 @@ export default function SuperheroGame() {
     setPhase("wrong");
 
     setTimeout(() => {
-      if (currentIndex + 1 >= totalWords) {
+      if (currentIndex + 1 >= cards.length) {
         setPhase("complete");
       } else {
         setCurrentIndex(i => i + 1);
         setPhase("playing");
       }
     }, 900);
-  }, [phase, currentIndex, totalWords]);
+  }, [phase, currentIndex, cards]);
 
   useEffect(() => { const w = cards[currentIndex]?.word; if (phase === "playing" && w) speak(w); }, [currentIndex, phase, cards]);
   useEffect(() => { if (phase === "victory" || phase === "complete") sfx("win"); }, [phase]);
@@ -247,7 +247,8 @@ export default function SuperheroGame() {
 
   const accuracy = cards.filter(c => c.correct === true).length;
   const currentCard = cards[currentIndex];
-  const progressPct = Math.round((currentIndex / totalWords) * 100);
+  const gameLen = cards.length || totalWords; // all assigned words (or 8 in free play)
+  const progressPct = Math.round((currentIndex / gameLen) * 100);
 
   // ── NO HOMEWORK LOADED ───────────────────────────────────────
   // This game must be opened from a child's assignment card so it plays
@@ -365,7 +366,7 @@ export default function SuperheroGame() {
   // ── VICTORY / COMPLETE SCREEN ────────────────────────────────
   if (phase === "victory" || phase === "complete") {
     const won = phase === "victory";
-    const stars = accuracy >= totalWords ? 3 : accuracy >= Math.ceil(totalWords * 0.7) ? 2 : 1;
+    const stars = accuracy >= gameLen ? 3 : accuracy >= Math.ceil(gameLen * 0.7) ? 2 : 1;
     return (
       <div style={pageStyle}>
         <style>{fonts}</style>
@@ -386,7 +387,7 @@ export default function SuperheroGame() {
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 28 }}>
             {[
-              { label: "Correct", value: `${accuracy}/${totalWords}`, icon: "✅" },
+              { label: "Correct", value: `${accuracy}/${gameLen}`, icon: "✅" },
               { label: "Score",   value: score,                        icon: "⭐" },
               { label: "Best Streak", value: `${bestStreak}x`,        icon: "🔥" },
             ].map(s => (
@@ -456,7 +457,7 @@ export default function SuperheroGame() {
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
             <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", fontWeight: 700 }}>Progress</span>
-            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", fontWeight: 700 }}>{currentIndex}/{totalWords}</span>
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", fontWeight: 700 }}>{currentIndex}/{gameLen}</span>
           </div>
           <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: 20, height: 8 }}>
             <div style={{ width: `${progressPct}%`, height: "100%", background: "linear-gradient(90deg, #2563EB, #7C3AED)", borderRadius: 20, transition: "width 0.4s ease" }} />
@@ -477,7 +478,7 @@ export default function SuperheroGame() {
             </div>
             <div style={{ fontFamily: "Bangers, cursive", fontSize: 14, color: "white", letterSpacing: 1, marginBottom: 8 }}>{hero.name}</div>
             <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginBottom: 6, fontWeight: 700 }}>POWER</div>
-            <PowerBar power={power} max={totalWords} />
+            <PowerBar power={power} max={gameLen} />
             {streak >= 3 && (
               <div style={{ marginTop: 6, fontSize: 11, fontWeight: 800, color: "#FCD34D" }}>🔥 {streak}x STREAK!</div>
             )}
@@ -500,9 +501,9 @@ export default function SuperheroGame() {
             </div>
             <div style={{ fontFamily: "Bangers, cursive", fontSize: 14, color: villain.color, letterSpacing: 1, marginBottom: 8 }}>{villain.name}</div>
             <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginBottom: 6, fontWeight: 700 }}>HP</div>
-            <PowerBar power={villainHp} max={totalWords} />
+            <PowerBar power={villainHp} max={gameLen} />
             <div style={{ marginTop: 6, display: "flex", justifyContent: "center", gap: 4 }}>
-              {Array.from({ length: totalWords }).map((_, i) => (
+              {Array.from({ length: gameLen }).map((_, i) => (
                 <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: i < villainHp ? villain.color : "rgba(255,255,255,0.1)", transition: "background 0.3s" }} />
               ))}
             </div>

@@ -236,10 +236,10 @@ export default function OceanGame() {
     setCards(prev => prev.map((c, i) => i === currentIndex ? { ...c, used: true, correct: true } : c));
     setPhase("correct");
     setTimeout(() => {
-      if (currentIndex + 1 >= totalWords) setPhase("complete");
+      if (currentIndex + 1 >= cards.length) setPhase("complete");
       else { setCurrentIndex(i => i + 1); setPhase("playing"); }
     }, 1000);
-  }, [phase, streak, bestStreak, currentIndex, totalWords]);
+  }, [phase, streak, bestStreak, currentIndex, cards]);
 
   const markWrong = useCallback(() => {
     if (phase !== "playing") return;
@@ -250,10 +250,10 @@ export default function OceanGame() {
     setCards(prev => prev.map((c, i) => i === currentIndex ? { ...c, used: true, correct: false } : c));
     setPhase("wrong");
     setTimeout(() => {
-      if (currentIndex + 1 >= totalWords) setPhase("complete");
+      if (currentIndex + 1 >= cards.length) setPhase("complete");
       else { setCurrentIndex(i => i + 1); setPhase("playing"); }
     }, 1000);
-  }, [phase, currentIndex, totalWords]);
+  }, [phase, currentIndex, cards]);
 
   useEffect(() => { const w = cards[currentIndex]?.word; if (phase === "playing" && w) speak(w); }, [currentIndex, phase, cards]);
   useEffect(() => { if (phase === "complete") sfx("win"); }, [phase]);
@@ -318,7 +318,8 @@ export default function OceanGame() {
 
   const accuracy = cards.filter(c => c.correct === true).length;
   const currentCard = cards[currentIndex];
-  const stars = accuracy >= totalWords ? 3 : accuracy >= Math.ceil(totalWords * 0.7) ? 2 : 1;
+  const gameLen = cards.length || totalWords; // all assigned words (or 8 in free play)
+  const stars = accuracy >= gameLen ? 3 : accuracy >= Math.ceil(gameLen * 0.7) ? 2 : 1;
 
   // -- NO HOMEWORK LOADED -------------------------------------------
   // Must be opened from a child's assignment card so it plays the
@@ -450,7 +451,7 @@ export default function OceanGame() {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 24 }}>
             {[
-              { icon: "✅", val: `${accuracy}/${totalWords}`, label: "Correct" },
+              { icon: "✅", val: `${accuracy}/${gameLen}`, label: "Correct" },
               { icon: "⭐", val: score, label: "Score" },
               { icon: "🔥", val: `${bestStreak}x`, label: "Best Streak" },
             ].map(s => (
@@ -486,7 +487,7 @@ export default function OceanGame() {
   }
 
   // -- PLAYING -------------------------------------------------------
-  const progressPct = Math.round((currentIndex / totalWords) * 100);
+  const progressPct = Math.round((currentIndex / gameLen) * 100);
 
   return (
     <div style={pageStyle}>
@@ -522,7 +523,7 @@ export default function OceanGame() {
         <div style={{ marginBottom: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
             <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", fontWeight: 700 }}>Progress</span>
-            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", fontWeight: 700 }}>{currentIndex}/{totalWords}</span>
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", fontWeight: 700 }}>{currentIndex}/{gameLen}</span>
           </div>
           <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: 20, height: 8 }}>
             <div style={{ width: `${progressPct}%`, height: "100%", background: "linear-gradient(90deg, #2B6CB0, #4ECDC4)", borderRadius: 20, transition: "width 0.4s ease" }} />
@@ -544,7 +545,7 @@ export default function OceanGame() {
             </div>
             <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 12, color: "white", marginBottom: 8 }}>{hero.name}</div>
             {streak >= 3 && <div style={{ fontSize: 11, fontWeight: 800, color: "#F6E05E", marginBottom: 6 }}>🔥 {streak}x streak!</div>}
-            <BubbleBar value={totalWords - villainHp} max={totalWords} color={hero.color} />
+            <BubbleBar value={gameLen - villainHp} max={gameLen} color={hero.color} />
           </div>
 
           <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 22, color: "rgba(255,255,255,0.25)", textAlign: "center" }}>VS</div>
@@ -560,7 +561,7 @@ export default function OceanGame() {
               {villain.emoji}
             </div>
             <div style={{ fontFamily: "'Fredoka One', cursive", fontSize: 12, color: villain.color, marginBottom: 8 }}>{villain.name}</div>
-            <BubbleBar value={villainHp} max={totalWords} color={villain.color} />
+            <BubbleBar value={villainHp} max={gameLen} color={villain.color} />
           </div>
         </div>
 
