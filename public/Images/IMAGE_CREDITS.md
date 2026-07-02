@@ -1,8 +1,8 @@
 # Word image credits
 
-Photos for these words were sourced from **Wikimedia Commons** and are used under
-free licenses (Public Domain / CC0 / CC BY / CC BY-SA). Each links to its Commons
-file page, where the author and exact license are shown.
+Photos for these words were sourced from **Wikimedia Commons** under free licenses
+(Public Domain / CC0 / CC BY / CC BY-SA). Each links to its Commons file page,
+where the author and exact license are shown.
 
 - **accordion** — CC BY-SA 3.0 — [A converter free-bass piano-accordion and a Russian bayan.jpg](https://commons.wikimedia.org/wiki/File:A_converter_free-bass_piano-accordion_and_a_Russian_bayan.jpg)
 - **ambulance** — CC BY-SA 4.0 — [Bedford J1 Ambulance 1966.jpg](https://commons.wikimedia.org/wiki/File:Bedford_J1_Ambulance_1966.jpg)
@@ -21,6 +21,7 @@ file page, where the author and exact license are shown.
 - **dictionary** — CC BY-SA 4.0 — [Compact Oxford English Dictionary 2.jpg](https://commons.wikimedia.org/wiki/File:Compact_Oxford_English_Dictionary_2.jpg)
 - **elevator** — CC BY-SA 4.0 — [14th floor elevator call buttons, the D Las Vegas 2022-03-29.jpg](https://commons.wikimedia.org/wiki/File:14th_floor_elevator_call_buttons,_the_D_Las_Vegas_2022-03-29.jpg)
 - **enchilada** — CC BY-SA 4.0 — [Festival de la Enchilada 59.jpg](https://commons.wikimedia.org/wiki/File:Festival_de_la_Enchilada_59.jpg)
+- **encyclopedia** — Public domain — [HW Wilson The reference shelf v 5 no 5 1927.djvu](https://commons.wikimedia.org/wiki/File:HW_Wilson_The_reference_shelf_v_5_no_5_1927.djvu)
 - **envelope** — Wikimedia Commons (free license)
 - **escalator** — CC BY 2.0 — [Copenhagen Metro escalators.jpg](https://commons.wikimedia.org/wiki/File:Copenhagen_Metro_escalators.jpg)
 - **flamingo** — Wikimedia Commons (free license)
@@ -33,6 +34,7 @@ file page, where the author and exact license are shown.
 - **incubator** — Public domain — [Egg incubator.jpg](https://commons.wikimedia.org/wiki/File:Egg_incubator.jpg)
 - **kookaburra** — CC BY-SA 3.0 — [Dacelo novaeguineae waterworks.jpg](https://commons.wikimedia.org/wiki/File:Dacelo_novaeguineae_waterworks.jpg)
 - **laboratory** — CC BY-SA 2.5 — [Beakers.jpg](https://commons.wikimedia.org/wiki/File:Beakers.jpg)
+- **lemonade** — CC BY-SA 4.0 — [Lemonade with strawberry.jpg](https://commons.wikimedia.org/wiki/File:Lemonade_with_strawberry.jpg)
 - **library** — Wikimedia Commons (free license)
 - **macaroni** — Wikimedia Commons (free license)
 - **microphone** — Wikimedia Commons (free license)
@@ -43,6 +45,7 @@ file page, where the author and exact license are shown.
 - **pepperoni** — CC BY-SA 4.0 — [Vegetarian Pizza.jpg](https://commons.wikimedia.org/wiki/File:Vegetarian_Pizza.jpg)
 - **photographer** — CC0 — [Preston Hazard Holding Leica Camera in 2025.jpg](https://commons.wikimedia.org/wiki/File:Preston_Hazard_Holding_Leica_Camera_in_2025.jpg)
 - **planetarium** — CC BY-SA 4.0 — [E&S Digital Laser Projector.jpg](https://commons.wikimedia.org/wiki/File:E&S_Digital_Laser_Projector.jpg)
+- **porcupine** — Public domain — [Porcupine (28780917308).jpg](https://commons.wikimedia.org/wiki/File:Porcupine_(28780917308).jpg)
 - **potato** — Wikimedia Commons (free license)
 - **pyramid** — Wikimedia Commons (free license)
 - **quesadilla** — CC BY-SA 4.0 — [Quesadilles de Blanes amb salses.jpg](https://commons.wikimedia.org/wiki/File:Quesadilles_de_Blanes_amb_salses.jpg)
@@ -51,9 +54,11 @@ file page, where the author and exact license are shown.
 - **restaurant** — Wikimedia Commons (free license)
 - **salamander** — Wikimedia Commons (free license)
 - **saxophone** — Wikimedia Commons (free license)
+- **speedometer** — CC BY-SA 4.0 — [1986 Buick Regal Stage One; Speedometer & Gas Gauge Only.jpg](https://commons.wikimedia.org/wiki/File:1986_Buick_Regal_Stage_One;_Speedometer_&_Gas_Gauge_Only.jpg)
 - **tarantula** — CC BY-SA 3.0 — [Brachypelma edit.jpg](https://commons.wikimedia.org/wiki/File:Brachypelma_edit.jpg)
 - **telescope** — Wikimedia Commons (free license)
 - **terrarium** — CC BY 2.0 — [Terrarium small.jpg](https://commons.wikimedia.org/wiki/File:Terrarium_small.jpg)
 - **tornado** — Wikimedia Commons (free license)
+- **ukulele** — CC BY-SA 4.0 — [Ukulele - SMV - X5218 01.tif](https://commons.wikimedia.org/wiki/File:Ukulele_-_SMV_-_X5218_01.tif)
 - **volleyball** — Wikimedia Commons (free license)
 - **waterfall** — Wikimedia Commons (free license)
