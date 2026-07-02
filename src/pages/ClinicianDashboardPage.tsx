@@ -27,18 +27,19 @@ type PracticeAssignment = {
 const MULTISYLLABIC_WORDS = [
   // 3 syllables
   "elephant", "umbrella", "butterfly", "kangaroo", "strawberry",
-  "yesterday", "together", "remember", "hospital", "beautiful",
-  "adventure", "crocodile", "hamburger", "banana", "tomato",
-  "avocado", "computer", "recorder", "another", "delivery",
-  "family", "animal", "calendar", "camera", "energy",
-  "cucumber", "newspaper", "grandmother", "grandfather", "neighborhood",
-  "basketball", "celebrate", "continue", "eleven", "enormous",
-  "magazine", "medallion", "officer", "operatе", "telephone",
+  "banana", "tomato", "potato", "hamburger", "dinosaur",
+  "tornado", "volcano", "pineapple", "gorilla", "microphone",
+  "octopus", "violin", "ladybug", "crocodile", "telephone",
   // 4 syllables
   "caterpillar", "watermelon", "alligator", "helicopter", "calculator",
-  "refrigerator", "motorcycle", "submarine", "spaghetti", "television",
-  "supermarket", "firefighter", "ballerina", "caterpillar", "imagination",
-  "understanding", "discovery", "elementary", "everybody", "information",
+  "motorcycle", "television", "avocado", "macaroni", "rhinoceros",
+  "binoculars", "aquarium", "ballerina", "supermarket", "salamander",
+  "thermometer", "cauliflower", "dictionary", "kindergarten", "elevator",
+  // 5 syllables
+  "hippopotamus", "refrigerator", "cafeteria", "auditorium", "planetarium",
+  "vocabulary", "elementary", "university", "electricity", "imagination",
+  "personality", "opportunity", "curiosity", "unbelievable", "organization",
+  "examination", "veterinary", "generosity", "creativity", "possibility",
 ];
 
 const SOUND_OPTIONS = [
