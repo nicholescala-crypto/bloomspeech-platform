@@ -24,23 +24,51 @@ type PracticeAssignment = {
   created_at?: string;
 };
 
-const MULTISYLLABIC_WORDS = [
-  // 3 syllables
-  "elephant", "umbrella", "butterfly", "kangaroo", "strawberry",
-  "banana", "tomato", "potato", "hamburger", "dinosaur",
-  "tornado", "volcano", "pineapple", "gorilla", "microphone",
-  "octopus", "violin", "ladybug", "crocodile", "telephone",
-  // 4 syllables
-  "caterpillar", "watermelon", "alligator", "helicopter", "calculator",
-  "motorcycle", "television", "avocado", "macaroni", "rhinoceros",
-  "binoculars", "aquarium", "ballerina", "supermarket", "salamander",
-  "thermometer", "cauliflower", "dictionary", "kindergarten", "elevator",
-  // 5 syllables
-  "hippopotamus", "refrigerator", "cafeteria", "auditorium", "planetarium",
-  "vocabulary", "elementary", "university", "electricity", "imagination",
-  "personality", "opportunity", "curiosity", "unbelievable", "organization",
-  "examination", "veterinary", "generosity", "creativity", "possibility",
-];
+// Multisyllabic word banks, grouped by syllable count so 3/4/5-syllable can
+// each be picked as its own target.
+const MULTISYLLABIC_BY_COUNT: Record<string, string[]> = {
+  "3-syllable": [
+    "elephant", "umbrella", "butterfly", "kangaroo", "strawberry",
+    "banana", "tomato", "potato", "hamburger", "dinosaur",
+    "tornado", "volcano", "pineapple", "gorilla", "microphone",
+    "octopus", "violin", "ladybug", "crocodile", "telephone",
+    "computer", "camera", "calendar", "cucumber", "newspaper",
+    "basketball", "buffalo", "envelope", "lemonade", "tricycle",
+    "grasshopper", "flamingo", "porcupine", "jellyfish", "unicorn",
+    "astronaut", "ambulance", "submarine", "parachute", "telescope",
+    "microscope", "saxophone", "volleyball", "trampoline", "library",
+    "hospital", "restaurant", "pyramid", "waterfall", "hurricane",
+  ],
+  "4-syllable": [
+    "caterpillar", "watermelon", "alligator", "helicopter", "calculator",
+    "motorcycle", "television", "avocado", "macaroni", "rhinoceros",
+    "binoculars", "aquarium", "ballerina", "supermarket", "salamander",
+    "thermometer", "cauliflower", "dictionary", "kindergarten", "elevator",
+    "escalator", "pepperoni", "guacamole", "ravioli", "cappuccino",
+    "asparagus", "orangutan", "tarantula", "anaconda", "kookaburra",
+    "terrarium", "gymnasium", "barometer", "speedometer", "accordion",
+    "harmonica", "ukulele", "generator", "radiator", "quesadilla",
+    "enchilada", "photographer", "librarian", "comedian", "electrician",
+    "incubator", "aviator", "gladiator", "custodian", "astronomer",
+  ],
+  "5+ syllable": [
+    "hippopotamus", "refrigerator", "cafeteria", "auditorium", "planetarium",
+    "vocabulary", "elementary", "university", "electricity", "imagination",
+    "personality", "opportunity", "curiosity", "unbelievable", "organization",
+    "examination", "veterinary", "generosity", "creativity", "possibility",
+    "observatory", "laboratory", "conservatory", "encyclopedia", "anniversary",
+    "documentary", "investigation", "responsibility", "invisibility", "veterinarian",
+    "pediatrician", "mathematician", "archaeology", "meteorology", "cardiology",
+    "dermatology", "civilization", "determination", "communication", "multiplication",
+    "pronunciation", "genealogy", "immunology", "physiology", "sociology",
+    "biodiversity", "extraordinary", "obstetrician", "statistician", "administration",
+  ],
+};
+
+const SYLLABLE_TARGETS = Object.keys(MULTISYLLABIC_BY_COUNT);
+
+// All multisyllabic words (used when difficulty = "Hard").
+const MULTISYLLABIC_WORDS = SYLLABLE_TARGETS.flatMap((k) => MULTISYLLABIC_BY_COUNT[k]);
 
 const SOUND_OPTIONS = [
   "r", "s", "l", "ch", "sh", "th", "k", "g", "f", "v",
@@ -131,6 +159,7 @@ export default function ClinicianDashboardPage() {
 
   // Words shown in the picker: auto-filtered to the selected sound + position.
   const gridWords = useMemo(() => {
+    if (MULTISYLLABIC_BY_COUNT[targetSound]) return MULTISYLLABIC_BY_COUNT[targetSound];
     if (difficulty === "Hard") return MULTISYLLABIC_WORDS;
     const pos = targetPosition === "Mixed" ? undefined : targetPosition;
     const filtered = wordsForSound(targetSound, pos);
@@ -454,6 +483,35 @@ export default function ClinicianDashboardPage() {
                 </div>
               </div>
 
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#567", marginBottom: 8 }}>
+                  Quick pick multisyllabic (20 words each)
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {SYLLABLE_TARGETS.map((target) => {
+                    const isSelected = targetSound === target;
+                    return (
+                      <button
+                        key={target}
+                        onClick={() => setTargetSound(target)}
+                        style={{
+                          padding: "8px 14px",
+                          borderRadius: 12,
+                          border: isSelected ? "2px solid #7c3aed" : "1px solid #e5d9f7",
+                          background: isSelected ? "#ede9fe" : "#faf8ff",
+                          color: "#4c1d95",
+                          fontWeight: 700,
+                          fontSize: 14,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {target}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
                 <button
                   onClick={() => setPracticeMode("word")}
@@ -481,12 +539,15 @@ export default function ClinicianDashboardPage() {
                 <>
                   <h3 style={{ color: "#163b3f" }}>
                     Choose Words
-                    {difficulty === "Hard" && (
+                    {SYLLABLE_TARGETS.includes(targetSound) ? (
+                      <span style={{ fontSize: 13, fontWeight: 500, color: "#7c3aed", marginLeft: 10 }}>
+                        {gridWords.length} {targetSound} words
+                      </span>
+                    ) : difficulty === "Hard" ? (
                       <span style={{ fontSize: 13, fontWeight: 500, color: "#7c3aed", marginLeft: 10 }}>
                         Multisyllabic words
                       </span>
-                    )}
-                    {difficulty !== "Hard" && (
+                    ) : (
                       <span style={{ fontSize: 13, fontWeight: 500, color: "#2fb8ae", marginLeft: 10 }}>
                         {gridWords.length} {targetSound} {targetPosition !== "Mixed" ? targetPosition.toLowerCase() : ""} words
                       </span>
