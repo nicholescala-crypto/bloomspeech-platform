@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase.ts";
 import { getSessionEmail, signOut } from "../lib/auth.ts";
+import { logPhiView } from "../lib/audit.ts";
 import { WORD_EMOJIS, DEFAULT_WORD_EMOJI } from "../games/data/wordEmojis";
 import { wordsForSound } from "../games/data/wordBank";
 type ChildProfile = {
@@ -188,6 +189,13 @@ export default function ClinicianDashboardPage() {
     setChildren(childrenData || []);
     setAssignments(assignmentData || []);
     setLoading(false);
+
+    // Audit: record that this clinician accessed their caseload (PHI).
+    if ((childrenData?.length ?? 0) > 0) {
+      logPhiView("children", {
+        context: `clinician viewed caseload (${childrenData!.length} patients)`,
+      });
+    }
   }
 
   const selectedChild = useMemo(() => {

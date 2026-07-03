@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { logPhiView } from "../lib/audit";
 
 type ChildProfile = {
   id: string;
@@ -238,6 +239,15 @@ export default function ParentDashboardPage() {
 
         setAssignments(Array.from(assignmentMap.values()));
         setLoading(false);
+
+        // Audit: record that this parent viewed their child's PHI (one row per child).
+        loadedChildren.forEach((child) => {
+          logPhiView("children", {
+            rowId: child.id,
+            childName: child.child_name || child.name || child.childName,
+            context: "parent viewed homework",
+          });
+        });
       } catch (err) {
         console.error("Unexpected error in loadParentData:", err);
         setChildren([]);
