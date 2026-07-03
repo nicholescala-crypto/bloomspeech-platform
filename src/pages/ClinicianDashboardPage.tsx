@@ -132,7 +132,7 @@ export default function ClinicianDashboardPage() {
   const [clinicianNote, setClinicianNote] = useState("");
   const [customWord, setCustomWord] = useState("");
   const [selectedWords, setSelectedWords] = useState<string[]>([]);
-  const [practiceMode, setPracticeMode] = useState<"word" | "sentence">("word");
+  const [practiceMode, setPracticeMode] = useState<"word" | "phrase" | "sentence">("word");
   const [missingImageWords, setMissingImageWords] = useState<Set<string>>(new Set());
   const [sentenceText, setSentenceText] = useState("");
 
@@ -271,15 +271,15 @@ export default function ClinicianDashboardPage() {
     }
 
     const wordsToSave =
-      practiceMode === "sentence"
-        ? sentenceText.split("\n").map((s) => s.trim()).filter(Boolean)
-        : selectedWords;
+      practiceMode === "word"
+        ? selectedWords
+        : sentenceText.split("\n").map((s) => s.trim()).filter(Boolean);
 
     if (wordsToSave.length === 0) {
       alert(
-        practiceMode === "sentence"
-          ? "Please enter at least one sentence."
-          : "Please choose at least one word."
+        practiceMode === "word"
+          ? "Please choose at least one word."
+          : `Please enter at least one ${practiceMode}.`
       );
       return;
     }
@@ -551,6 +551,16 @@ export default function ClinicianDashboardPage() {
                   Word Practice
                 </button>
                 <button
+                  onClick={() => setPracticeMode("phrase")}
+                  style={{
+                    ...tealButtonStyle,
+                    background: practiceMode === "phrase" ? "#163b3f" : "#e2e8f0",
+                    color: practiceMode === "phrase" ? "white" : "#163b3f",
+                  }}
+                >
+                  Phrase Practice
+                </button>
+                <button
                   onClick={() => setPracticeMode("sentence")}
                   style={{
                     ...tealButtonStyle,
@@ -638,28 +648,36 @@ export default function ClinicianDashboardPage() {
                 </>
               ) : (
                 <>
-                  <h3 style={{ color: "#163b3f" }}>Type Sentences</h3>
+                  <h3 style={{ color: "#163b3f" }}>
+                    {practiceMode === "phrase" ? "Build Phrases" : "Type Sentences"}
+                  </h3>
                   <p style={{ color: "#567", marginTop: 0, marginBottom: 10, fontSize: 15 }}>
-                    One sentence per line. The child will read each one aloud during practice.
+                    One {practiceMode} per line. The child will say each one aloud during practice.
                   </p>
                   <textarea
                     value={sentenceText}
                     onChange={(e) => setSentenceText(e.target.value)}
-                    placeholder={"The cat sat on the mat.\nShe sells seashells by the seashore.\nThe big dog ran fast."}
+                    placeholder={
+                      practiceMode === "phrase"
+                        ? "the big rabbit\nmy red ball\nhot soup"
+                        : "The cat sat on the mat.\nShe sells seashells by the seashore.\nThe big dog ran fast."
+                    }
                     style={{ ...textareaStyle, minHeight: 160, marginBottom: 14 }}
                   />
 
                   {gridWords.length > 0 && (
                     <div style={{ marginBottom: 18 }}>
                       <h4 style={{ color: "#163b3f", margin: "0 0 4px" }}>
-                        Suggested sentences
+                        {practiceMode === "phrase" ? "Suggested phrases" : "Suggested sentences"}
                         <span style={{ fontWeight: 500, color: "#7c3aed", fontSize: 13, marginLeft: 8 }}>
                           {targetSound}
                           {targetPosition !== "Mixed" ? " " + targetPosition.toLowerCase() : ""}
                         </span>
                       </h4>
                       <p style={{ color: "#567", margin: "0 0 10px", fontSize: 13 }}>
-                        Click a sentence to add it above. Green = easy (K–2), teal = harder (grades 3–5). You can edit anything after adding.
+                        {practiceMode === "phrase"
+                          ? "Click a phrase to add it above. You can edit anything after adding."
+                          : "Click a sentence to add it above. Green = easy (K–2), teal = harder (grades 3–5). You can edit anything after adding."}
                       </p>
                       <div
                         style={{
@@ -672,7 +690,7 @@ export default function ClinicianDashboardPage() {
                         }}
                       >
                         {gridWords.map((word) => {
-                          const { easy, hard } = generateSentences(word);
+                          const { phrase, easy, hard } = generateSentences(word);
                           return (
                             <div
                               key={word}
@@ -688,20 +706,32 @@ export default function ClinicianDashboardPage() {
                               <span style={{ fontWeight: 800, color: "#163b3f", minWidth: 78 }}>
                                 {word}
                               </span>
-                              <button
-                                type="button"
-                                onClick={() => addSentence(easy)}
-                                style={suggestChipStyle("#22c55e", "#dcfce7")}
-                              >
-                                + {easy}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => addSentence(hard)}
-                                style={suggestChipStyle("#2fb8ae", "#d7f5f2")}
-                              >
-                                + {hard}
-                              </button>
+                              {practiceMode === "phrase" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => addSentence(phrase)}
+                                  style={suggestChipStyle("#7c3aed", "#ede9fe")}
+                                >
+                                  + {phrase}
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => addSentence(easy)}
+                                    style={suggestChipStyle("#22c55e", "#dcfce7")}
+                                  >
+                                    + {easy}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => addSentence(hard)}
+                                    style={suggestChipStyle("#2fb8ae", "#d7f5f2")}
+                                  >
+                                    + {hard}
+                                  </button>
+                                </>
+                              )}
                             </div>
                           );
                         })}
