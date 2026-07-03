@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase.ts";
 import { getSessionEmail, signOut } from "../lib/auth.ts";
 import { logPhiView } from "../lib/audit.ts";
+import { generateSentences } from "../games/data/sentenceBank.ts";
 import { WORD_EMOJIS, DEFAULT_WORD_EMOJI } from "../games/data/wordEmojis";
 import { wordsForSound } from "../games/data/wordBank";
 type ChildProfile = {
@@ -145,6 +146,15 @@ export default function ClinicianDashboardPage() {
     const filtered = wordsForSound(targetSound, pos);
     return filtered.length ? filtered : DEFAULT_WORDS;
   }, [difficulty, targetSound, targetPosition]);
+
+  // Append a suggested sentence to the sentence box (one per line, no dupes).
+  function addSentence(sentence: string) {
+    setSentenceText((prev) => {
+      const lines = prev.split("\n").map((l) => l.trim()).filter(Boolean);
+      if (lines.includes(sentence)) return prev;
+      return (prev.trim() ? prev.trim() + "\n" : "") + sentence;
+    });
+  }
 
   useEffect(() => {
     (async () => {
@@ -636,8 +646,68 @@ export default function ClinicianDashboardPage() {
                     value={sentenceText}
                     onChange={(e) => setSentenceText(e.target.value)}
                     placeholder={"The cat sat on the mat.\nShe sells seashells by the seashore.\nThe big dog ran fast."}
-                    style={{ ...textareaStyle, minHeight: 160, marginBottom: 18 }}
+                    style={{ ...textareaStyle, minHeight: 160, marginBottom: 14 }}
                   />
+
+                  {gridWords.length > 0 && (
+                    <div style={{ marginBottom: 18 }}>
+                      <h4 style={{ color: "#163b3f", margin: "0 0 4px" }}>
+                        Suggested sentences
+                        <span style={{ fontWeight: 500, color: "#7c3aed", fontSize: 13, marginLeft: 8 }}>
+                          {targetSound}
+                          {targetPosition !== "Mixed" ? " " + targetPosition.toLowerCase() : ""}
+                        </span>
+                      </h4>
+                      <p style={{ color: "#567", margin: "0 0 10px", fontSize: 13 }}>
+                        Click a sentence to add it above. Green = easy (K–2), teal = harder (grades 3–5). You can edit anything after adding.
+                      </p>
+                      <div
+                        style={{
+                          maxHeight: 260,
+                          overflowY: "auto",
+                          border: "1px solid #dbe7e6",
+                          borderRadius: 12,
+                          padding: 10,
+                          background: "#f8fbfb",
+                        }}
+                      >
+                        {gridWords.map((word) => {
+                          const { easy, hard } = generateSentences(word);
+                          return (
+                            <div
+                              key={word}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                                flexWrap: "wrap",
+                                padding: "7px 0",
+                                borderBottom: "1px solid #eef4f3",
+                              }}
+                            >
+                              <span style={{ fontWeight: 800, color: "#163b3f", minWidth: 78 }}>
+                                {word}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => addSentence(easy)}
+                                style={suggestChipStyle("#22c55e", "#dcfce7")}
+                              >
+                                + {easy}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => addSentence(hard)}
+                                style={suggestChipStyle("#2fb8ae", "#d7f5f2")}
+                              >
+                                + {hard}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
 
@@ -812,6 +882,20 @@ const greenButtonStyle = {
   fontWeight: 800,
   cursor: "pointer",
 };
+
+function suggestChipStyle(border: string, bg: string) {
+  return {
+    border: `1px solid ${border}`,
+    background: bg,
+    color: "#163b3f",
+    borderRadius: 999,
+    padding: "6px 12px",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    textAlign: "left" as const,
+  };
+}
 
 const tealButtonStyle = {
   padding: "13px 18px",
