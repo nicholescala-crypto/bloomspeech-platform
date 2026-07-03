@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase.ts";
+import { getSessionEmail, signOut } from "../lib/auth.ts";
 import { WORD_EMOJIS, DEFAULT_WORD_EMOJI } from "../games/data/wordEmojis";
 import { wordsForSound } from "../games/data/wordBank";
 type ChildProfile = {
@@ -114,28 +115,6 @@ const DEFAULT_WORDS = [
   "snake", "snap", "snack", "snail", "sneak", "snow",
 ];
 
-function getClinicianEmail() {
-  const savedEmail = localStorage.getItem("currentClinicianEmail");
-
-  if (savedEmail && savedEmail.includes("@")) {
-    return savedEmail.trim().toLowerCase();
-  }
-
-  try {
-    const raw = localStorage.getItem("currentUser");
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed?.role === "clinician" && parsed?.email) {
-        return String(parsed.email).trim().toLowerCase();
-      }
-    }
-  } catch {
-    return "";
-  }
-
-  return "";
-}
-
 export default function ClinicianDashboardPage() {
   const [children, setChildren] = useState<ChildProfile[]>([]);
   const [assignments, setAssignments] = useState<PracticeAssignment[]>([]);
@@ -155,7 +134,7 @@ export default function ClinicianDashboardPage() {
   const [missingImageWords, setMissingImageWords] = useState<Set<string>>(new Set());
   const [sentenceText, setSentenceText] = useState("");
 
-  const clinicianEmail = getClinicianEmail();
+  const [clinicianEmail, setClinicianEmail] = useState("");
 
   // Words shown in the picker: auto-filtered to the selected sound + position.
   const gridWords = useMemo(() => {
@@ -167,15 +146,29 @@ export default function ClinicianDashboardPage() {
   }, [difficulty, targetSound, targetPosition]);
 
   useEffect(() => {
-    loadData();
+    (async () => {
+      const email = await getSessionEmail();
+      setClinicianEmail(email);
+      await loadData(email);
+    })();
   }, []);
 
-  async function loadData() {
+  async function loadData(email: string) {
     setLoading(true);
 
+    if (!email) {
+      setChildren([]);
+      setAssignments([]);
+      setLoading(false);
+      return;
+    }
+
+    // Filter to THIS clinician's caseload. RLS enforces the same rule
+    // server-side, so this is defense in depth plus correct scoping.
     const { data: childrenData, error: childrenError } = await supabase
       .from("children")
       .select("*")
+      .ilike("clinician_email", email)
       .order("created_at", { ascending: false });
 
     if (childrenError) {
@@ -185,6 +178,7 @@ export default function ClinicianDashboardPage() {
     const { data: assignmentData, error: assignmentError } = await supabase
       .from("assignments")
       .select("*")
+      .ilike("clinician_email", email)
       .order("created_at", { ascending: false });
 
     if (assignmentError) {
@@ -227,7 +221,7 @@ export default function ClinicianDashboardPage() {
 
     setChildName("");
     setParentEmail("");
-    await loadData();
+    await loadData(clinicianEmail);
 
     alert("Child added.");
   }
@@ -293,7 +287,7 @@ export default function ClinicianDashboardPage() {
 
     setSelectedWords([]);
     setClinicianNote("");
-    await loadData();
+    await loadData(clinicianEmail);
 
     alert("Assignment saved for " + selectedChild.child_name);
   }
@@ -319,7 +313,7 @@ export default function ClinicianDashboardPage() {
       setSelectedChildId("");
     }
 
-    await loadData();
+    await loadData(clinicianEmail);
   }
 
   async function deleteAssignment(assignmentId: string) {
@@ -337,7 +331,7 @@ export default function ClinicianDashboardPage() {
       return;
     }
 
-    await loadData();
+    await loadData(clinicianEmail);
   }
 
   if (loading) {
@@ -370,6 +364,21 @@ export default function ClinicianDashboardPage() {
           {clinicianEmail && (
             <p style={{ color: "#789" }}>
               Signed in as: <strong>{clinicianEmail}</strong>
+              <button
+                onClick={signOut}
+                style={{
+                  marginLeft: 14,
+                  padding: "6px 14px",
+                  borderRadius: 10,
+                  border: "1px solid #cfe1df",
+                  background: "white",
+                  color: "#163b3f",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Sign out
+              </button>
             </p>
           )}
         </header>

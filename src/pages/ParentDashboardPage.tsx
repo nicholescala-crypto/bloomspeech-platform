@@ -38,45 +38,13 @@ type PracticeAssignment = {
 };
 
 async function getParentEmail(): Promise<string> {
-  // 1. Check URL params first (for testing/sharing links)
-  const params = new URLSearchParams(window.location.search);
-  const urlEmail = params.get("email");
-  if (urlEmail && urlEmail.includes("@")) {
-    return urlEmail.trim().toLowerCase();
-  }
-
-  // 2. Read directly from the live Supabase auth session (most reliable)
-  try {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (session?.user?.email) {
-      return session.user.email.trim().toLowerCase();
-    }
-  } catch (err) {
-    console.warn("Could not read Supabase session:", err);
-  }
-
-  // 3. Fall back to localStorage currentUser JSON
-  try {
-    const raw = localStorage.getItem("currentUser");
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed?.email && String(parsed.email).includes("@")) {
-        return String(parsed.email).trim().toLowerCase();
-      }
-    }
-  } catch {
-    // ignore parse errors
-  }
-
-  // 4. Last resort: bare email string in localStorage
-  const storedParentEmail = localStorage.getItem("currentParentEmail");
-  if (storedParentEmail && storedParentEmail.includes("@")) {
-    return storedParentEmail.trim().toLowerCase();
-  }
-
-  return "";
+  // Identity comes ONLY from the signed Supabase session. URL params and
+  // localStorage were removed because a user could set them to any email and
+  // read another family's data. RLS enforces the same rule server-side.
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  return session?.user?.email?.trim().toLowerCase() ?? "";
 }
 
 // ─── Sound theme ────────────────────────────────────────────────────────────

@@ -2,29 +2,11 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 async function getParentEmail(): Promise<string> {
-  const params = new URLSearchParams(window.location.search);
-  const urlEmail = params.get("email");
-  if (urlEmail && urlEmail.includes("@")) return urlEmail.trim().toLowerCase();
-
-  try {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (session?.user?.email) return session.user.email.trim().toLowerCase();
-  } catch {}
-
-  try {
-    const raw = localStorage.getItem("currentUser");
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed?.email?.includes("@"))
-        return String(parsed.email).trim().toLowerCase();
-    }
-  } catch {}
-
-  const stored = localStorage.getItem("currentParentEmail");
-  if (stored?.includes("@")) return stored.trim().toLowerCase();
-  return "";
+  // Identity comes ONLY from the signed Supabase session (see ParentDashboard).
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  return session?.user?.email?.trim().toLowerCase() ?? "";
 }
 
 type SoundTab = {

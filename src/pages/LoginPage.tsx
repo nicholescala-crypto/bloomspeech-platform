@@ -1,57 +1,36 @@
 import { useState } from "react";
-
-function clearStaleRoleData() {
-  localStorage.removeItem("currentClinicianEmail");
-  localStorage.removeItem("currentParentEmail");
-  localStorage.removeItem("currentUser");
-}
+import { sendMagicLink } from "../lib/auth";
 
 export default function LoginPage() {
-  const [parentEmail, setParentEmail] = useState("");
-  const [clinicianEmail, setClinicianEmail] = useState("");
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(
+    "idle"
+  );
+  const [message, setMessage] = useState("");
 
-  function handleParentLogin() {
-    const cleanEmail = parentEmail.trim().toLowerCase();
-
-    if (!cleanEmail) {
-      alert("Please enter the parent email.");
+  async function handleSendLink() {
+    const clean = email.trim().toLowerCase();
+    if (!clean || !clean.includes("@")) {
+      setStatus("error");
+      setMessage("Please enter a valid email address.");
       return;
     }
 
-    clearStaleRoleData();
-    localStorage.setItem("currentParentEmail", cleanEmail);
+    setStatus("sending");
+    setMessage("");
 
-    localStorage.setItem(
-      "currentUser",
-      JSON.stringify({
-        role: "parent",
-        email: cleanEmail,
-      })
-    );
+    const { error } = await sendMagicLink(clean);
 
-    window.location.replace("/parent");
-  }
-
-  function handleClinicianLogin() {
-    const cleanEmail = clinicianEmail.trim().toLowerCase();
-
-    if (!cleanEmail) {
-      alert("Please enter the clinician email.");
+    if (error) {
+      setStatus("error");
+      setMessage(error.message || "Could not send the sign-in link.");
       return;
     }
 
-    clearStaleRoleData();
-    localStorage.setItem("currentClinicianEmail", cleanEmail);
-
-    localStorage.setItem(
-      "currentUser",
-      JSON.stringify({
-        role: "clinician",
-        email: cleanEmail,
-      })
+    setStatus("sent");
+    setMessage(
+      "Check your email for a secure sign-in link. It expires shortly, so open it soon."
     );
-
-    window.location.replace("/clinician");
   }
 
   return (
@@ -69,7 +48,7 @@ export default function LoginPage() {
       <div
         style={{
           width: "100%",
-          maxWidth: 950,
+          maxWidth: 460,
           background: "white",
           borderRadius: 28,
           padding: 32,
@@ -81,7 +60,7 @@ export default function LoginPage() {
             marginTop: 0,
             marginBottom: 10,
             color: "#163b3f",
-            fontSize: 38,
+            fontSize: 34,
             textAlign: "center",
           }}
         >
@@ -91,81 +70,71 @@ export default function LoginPage() {
         <p
           style={{
             marginTop: 0,
-            marginBottom: 30,
+            marginBottom: 26,
             color: "#567",
-            fontSize: 18,
+            fontSize: 17,
             textAlign: "center",
           }}
         >
-          Sign in to view or assign Bloom Therapy speech practice homework.
+          Enter your email and we'll send you a secure sign-in link. Parents and
+          clinicians both sign in here.
         </p>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-            gap: 22,
-          }}
-        >
-          <section
+        {status === "sent" ? (
+          <div
             style={{
-              background: "#f8fbfb",
-              border: "1px solid #dbe7e6",
-              borderRadius: 22,
-              padding: 24,
+              background: "#ecfdf5",
+              border: "1px solid #a7f3d0",
+              borderRadius: 16,
+              padding: 20,
+              color: "#065f46",
+              fontSize: 16,
+              textAlign: "center",
             }}
           >
-            <h2 style={{ marginTop: 0, color: "#163b3f" }}>
-              Parent Sign In
-            </h2>
-
-            <p style={{ color: "#567", fontSize: 16 }}>
-              Use the same parent email that the clinician added to the child
-              profile.
-            </p>
-
+            {message}
+          </div>
+        ) : (
+          <>
             <input
-              value={parentEmail}
-              onChange={(event) => setParentEmail(event.target.value)}
-              placeholder="Parent email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") handleSendLink();
+              }}
+              placeholder="you@example.com"
               type="email"
+              autoComplete="email"
               style={inputStyle}
             />
 
-            <button onClick={handleParentLogin} style={greenButtonStyle}>
-              Open Parent Portal
+            <button
+              onClick={handleSendLink}
+              disabled={status === "sending"}
+              style={{
+                ...tealButtonStyle,
+                opacity: status === "sending" ? 0.6 : 1,
+                cursor: status === "sending" ? "default" : "pointer",
+              }}
+            >
+              {status === "sending" ? "Sending…" : "Send sign-in link"}
             </button>
-          </section>
 
-          <section
-            style={{
-              background: "#f8fbfb",
-              border: "1px solid #dbe7e6",
-              borderRadius: 22,
-              padding: 24,
-            }}
-          >
-            <h2 style={{ marginTop: 0, color: "#163b3f" }}>
-              Clinician Sign In
-            </h2>
-
-            <p style={{ color: "#567", fontSize: 16 }}>
-              Sign in as the clinician to add children and assign homework.
-            </p>
-
-            <input
-              value={clinicianEmail}
-              onChange={(event) => setClinicianEmail(event.target.value)}
-              placeholder="Clinician email"
-              type="email"
-              style={inputStyle}
-            />
-
-            <button onClick={handleClinicianLogin} style={tealButtonStyle}>
-              Open Clinician Dashboard
-            </button>
-          </section>
-        </div>
+            {status === "error" && (
+              <p
+                style={{
+                  color: "#b91c1c",
+                  fontSize: 15,
+                  marginTop: 14,
+                  marginBottom: 0,
+                  textAlign: "center",
+                }}
+              >
+                {message}
+              </p>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
@@ -184,18 +153,6 @@ const inputStyle = {
   marginBottom: 14,
 };
 
-const greenButtonStyle = {
-  width: "100%",
-  padding: "14px 18px",
-  borderRadius: 14,
-  border: "none",
-  background: "#22c55e",
-  color: "white",
-  fontSize: 16,
-  fontWeight: 800,
-  cursor: "pointer",
-};
-
 const tealButtonStyle = {
   width: "100%",
   padding: "14px 18px",
@@ -205,5 +162,4 @@ const tealButtonStyle = {
   color: "white",
   fontSize: 16,
   fontWeight: 800,
-  cursor: "pointer",
 };

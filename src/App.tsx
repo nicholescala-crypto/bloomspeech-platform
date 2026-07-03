@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import LoginPage from "./pages/LoginPage";
+import AuthCallbackPage from "./pages/AuthCallbackPage";
 import ParentDashboardPage from "./pages/ParentDashboardPage";
 import HomePracticePage from "./pages/HomePracticePage";
 import ClinicianDashboardPage from "./pages/ClinicianDashboardPage";
@@ -12,26 +13,7 @@ import SpaceGame from "./pages/SpaceGame";
 import PizzaGame from "./pages/PizzaGame";
 import TowerGame from "./pages/TowerGame";
 import GardenGame from "./pages/GardenGame";
-
-type UserRole = "parent" | "clinician" | "";
-
-function getCurrentUserRole(): UserRole {
-  try {
-    const raw = localStorage.getItem("currentUser");
-    if (!raw) {
-      return "";
-    }
-
-    const parsed = JSON.parse(raw);
-    if (parsed?.role === "parent" || parsed?.role === "clinician") {
-      return parsed.role;
-    }
-  } catch {
-    // ignore malformed values
-  }
-
-  return "";
-}
+import { getSessionRole, type Role } from "./lib/auth";
 
 function NotFoundPage() {
   return (
@@ -49,37 +31,48 @@ function NotFoundPage() {
   );
 }
 
-const PARENT_PROTECTED_PATHS = [
-  "/parent",
-  "/parent-dashboard",
-  "/parent-portal",
-  "/home-practice",
-];
-
 export default function App() {
   const rawPath = window.location.pathname.toLowerCase();
   const path = rawPath.replace(/\/+$/, "") || "/";
-  const initialRole = getCurrentUserRole();
 
-  // When role appears empty on a parent-protected path, wait 300ms and re-check
-  // before redirecting — localStorage may not be populated yet after a cross-domain
-  // redirect (bloom-speech-homework.vercel.app <-> app.bloomtherapymt.com).
-  const isParentPath = PARENT_PROTECTED_PATHS.includes(path);
-  const [role, setRole] = useState<UserRole>(initialRole);
-  const [ready, setReady] = useState(initialRole !== "" || !isParentPath);
+  // Identity comes from the real Supabase session, resolved once on load.
+  const [role, setRole] = useState<Role>("");
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (ready) return;
-    const timer = setTimeout(() => {
-      setRole(getCurrentUserRole());
+    let cancelled = false;
+    getSessionRole().then(({ role }) => {
+      if (cancelled) return;
+      setRole(role);
       setReady(true);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [ready]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
+  // The auth callback manages its own loading UI and needs no session yet.
+  if (path === "/auth/callback") {
+    return <AuthCallbackPage />;
+  }
+
+  // Public game/practice routes render without waiting on auth.
+  const publicRoute = renderPublicRoute(path);
+  if (publicRoute) return publicRoute;
+
+  // Everything below is auth-gated — wait until the session is resolved.
   if (!ready) return null;
 
   if (path === "/" || path === "/login") {
+    // Already signed in? Send them to their portal instead of the login form.
+    if (role === "clinician") {
+      window.location.replace("/clinician");
+      return null;
+    }
+    if (role === "parent") {
+      window.location.replace("/parent");
+      return null;
+    }
     return <LoginPage />;
   }
 
@@ -93,6 +86,14 @@ export default function App() {
       return null;
     }
     return <ParentDashboardPage />;
+  }
+
+  if (path === "/home-practice") {
+    if (role !== "parent") {
+      window.location.replace("/login");
+      return null;
+    }
+    return <HomePracticePage />;
   }
 
   if (
@@ -109,49 +110,24 @@ export default function App() {
     return <ClinicianDashboardPage />;
   }
 
-  if (path === "/home-practice") {
-    if (role !== "parent") {
-      window.location.replace("/login");
-      return null;
-    }
-    return <HomePracticePage />;
-  }
-
-  if (path === "/superhero-game") {
-    return <SuperheroGame />;
-  }
-
-  if (path === "/ocean-game") {
-    return <OceanGame />;
-  }
-
-  if (path === "/play" || path === "/practice") {
-    return <PlayPage />;
-  }
-
-  if (path === "/adventure-game" || path === "/adventure" || path === "/word-quest") {
-    return <AdventureGame />;
-  }
-
-  if (path === "/space-game" || path === "/space" || path === "/star-words") {
-    return <SpaceGame />;
-  }
-
-  if (path === "/pizza-game" || path === "/pizza" || path === "/bloom-pizza") {
-    return <PizzaGame />;
-  }
-
-  if (path === "/tower-game" || path === "/tower" || path === "/word-tower") {
-    return <TowerGame />;
-  }
-
-  if (path === "/garden-game" || path === "/garden" || path === "/bloom-garden") {
-    return <GardenGame />;
-  }
-
-  if (path === "/rewards" || path === "/shop") {
-    return <RewardsShopPage />;
-  }
-
   return <NotFoundPage />;
+}
+
+// Routes that carry no PHI and don't require a session.
+function renderPublicRoute(path: string) {
+  if (path === "/superhero-game") return <SuperheroGame />;
+  if (path === "/ocean-game") return <OceanGame />;
+  if (path === "/play" || path === "/practice") return <PlayPage />;
+  if (path === "/adventure-game" || path === "/adventure" || path === "/word-quest")
+    return <AdventureGame />;
+  if (path === "/space-game" || path === "/space" || path === "/star-words")
+    return <SpaceGame />;
+  if (path === "/pizza-game" || path === "/pizza" || path === "/bloom-pizza")
+    return <PizzaGame />;
+  if (path === "/tower-game" || path === "/tower" || path === "/word-tower")
+    return <TowerGame />;
+  if (path === "/garden-game" || path === "/garden" || path === "/bloom-garden")
+    return <GardenGame />;
+  if (path === "/rewards" || path === "/shop") return <RewardsShopPage />;
+  return null;
 }
