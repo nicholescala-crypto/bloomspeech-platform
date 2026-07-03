@@ -54,6 +54,10 @@ const CURATED: Record<string, SentenceSet> = {
   sand: { phrase: "warm sand", easy: "I play in the sand.", hard: "The warm sand felt nice between my toes." },
   soap: { phrase: "the soap", easy: "I use the soap.", hard: "She washed her hands with the sweet-smelling soap." },
   milk: { phrase: "cold milk", easy: "I drink my milk.", hard: "She poured cold milk into the tall glass." },
+  // tricky words that don't fit any generic frame
+  love: { phrase: "lots of love", easy: "I love my dog.", hard: "A warm hug shows someone how much you love them." },
+  life: { phrase: "a happy life", easy: "I have a good life.", hard: "The old turtle lived a long and happy life." },
+  french: { phrase: "so French", easy: "It is French.", hard: "It looks very French." },
 };
 
 function startsWithVowel(word: string): boolean {
@@ -91,6 +95,43 @@ const PHRASE_FRAMES = [
   (w: string) => `the happy ${w}`,
 ];
 
+// ── Part-of-speech routing ──────────────────────────────────────────────────
+// The noun frames above only fit concrete, picturable nouns. These sets catch
+// words that don't (verbs, adjectives, -ing activities, abstract/function
+// words) and route them to frames that stay grammatical. Anything not listed
+// defaults to the noun frames. Populated from a full sweep of the word bank.
+
+const VERBS = new Set<string>([
+  "run","ride","rip","carry","marry","hurry","borrow","care","dare","sit","sell","listen","miss","toss","follow","smile","fall","pull","chew","chase","chat","chop","cheer","capture","teach","catch","touch","reach","hatch","fetch","scratch","march","punch","crunch","itch","pitch","shake","share","shut","shine","shout","wish","splash","crash","wash","push","flash","mash","gush","blush","dash","swish","crush","smash","polish","hush","finish","think","thank","thaw","thump","throw","cut","kick","look","lick","pick","peek","go","gather","gallop","wiggle","giggle","juggle","hug","dig","tug","jog","snag","cough","laugh","puff","sniff","scuff","scoff","surf","visit","vote","travel","dive","save","give","drive","move","pave","weave","leave","shave","stop","stare","start","steer","sting","stink","stir","stoke","stomp","stun","stay","speak","spell","spill","spin","spawn","spend","spit","splice","spoil","spray","sprint","spurt","sparkle","blend","blink","bloom","blow","blur","blame","blare","bleed","bless","grab","grow","grasp","graze","grin","groan","growl","grunt","trim","trace","trade","tromp","trot","trill","trek","tread","trust","praise","pray","press","prove","preach","preen","prep","pretend","probe","prickle","promise","practice","draw","drag","drift","drip","drown","drool","drench","drawl","dread","dribble","drizzle","swim","swear","sweep","swell","swill","swipe","swoop","swirl","swivel","sway","sweat","snap","sneak","snarl","snatch","sneer","snoop","snore","snort","snub","snuff","sneeze","snuggle","sniffle","snip","freeze","frown","fray","fret","frighten","freak","frizz","defend","refill",
+]);
+const ADJECTIVES = new Set<string>([
+  "red","merry","hairy","scary","dirty","purple","thirsty","perfect","juicy","messy","bossy","tall","yellow","polar","solar","hollow","jolly","chubby","itchy","richer","scratchy","shy","shaggy","sharp","shiny","special","delicious","thick","thin","thorny","healthy","filthy","frothy","wealthy","broken","foggy","soggy","regular","bigger","big","sick","fast","awful","comfy","careful","vivid","woven","stale","stark","steep","stiff","stout","stinky","stuck","stern","spare","spooky","black","blue","bland","blank","bleak","blind","blunt","blond","grand","grim","grumpy","graceful","gray","great","greedy","green","true","proud","prim","pretty","free","frail","frank","frozen","french","friendly","frantic","dry","dried","drowsy","sweet","swift","swampy","snug","snowy","good","brave",
+]);
+const GERUNDS = new Set<string>([
+  "racing","kissing","dancing","bouncing","watching","marching","punching","munching","teaching","washing","fishing","pushing","wishing","splashing","crashing","hugging","jogging","tugging","digging","surfing","diving","driving","shaving","waving","swimming","swinging","spelling",
+]);
+// abstract (love/truth/error…) + function words (very/after…) share a safe,
+// always-grammatical "say the word" fallback rather than a usage sentence.
+const SAY_ONLY = new Set<string>([
+  // abstract nouns
+  "error","story","war","soccer","recess","gossip","love","color","feeling","channel","chapter","charm","future","nature","feature","adventure","motion","fashion","vacation","action","math","breath","youth","growth","truth","faith","myth","month","marathon","method","mathematics","toothache","sympathy","earthquake","music","traffic","fun","life","stuff","heaven","fever","navy","speed","sport","spree","spoof","blight","bliss","grade","grace","greed","grief","group","grunge","gravity","grant","trip","trend","trial","trick","truce","price","prank","prose","project","frostbite","dream","draft","swag","thud","theme","voice","volume","golf","yoga","birthday","party","morning","stunt","style",
+  // function / grammar words
+  "scratching","sorry","tomorrow","four","far","more","six","seven","missing","yes","less","hello","much","each","inch","thirty","thursday","thousand","third","three","thirteen","anything","nothing","something","everything","north","south","both","beneath","fourth","second","week","before","after","half","off","above","twelve","eleven","never","living","having","given","gave","wove","august","still","stank","stung","stunk","spun","tried","trod","swept","frequently","front","very","gram","drove","matching",
+]);
+
+function verbSet(w: string): SentenceSet {
+  return { phrase: `${w} again`, easy: `I can ${w}.`, hard: `I ${w} every day.` };
+}
+function adjectiveSet(w: string): SentenceSet {
+  return { phrase: `so ${w}`, easy: `It is ${w}.`, hard: `It looks very ${w}.` };
+}
+function gerundSet(w: string): SentenceSet {
+  return { phrase: `love ${w}`, easy: `I like ${w}.`, hard: `I am good at ${w}.` };
+}
+function sayOnlySet(w: string): SentenceSet {
+  return { phrase: `the word ${w}`, easy: `I can say ${w}.`, hard: `Can you say the word ${w}?` };
+}
+
 // Deterministic pick so a given word always yields the same sentence (stable
 // across renders) while different words get variety.
 function pick(word: string, salt: string, len: number): number {
@@ -104,6 +145,10 @@ export function generateSentences(rawWord: string): SentenceSet {
   const word = rawWord.trim().toLowerCase();
   if (!word) return { phrase: "", easy: "", hard: "" };
   if (CURATED[word]) return CURATED[word];
+  if (GERUNDS.has(word)) return gerundSet(word);
+  if (ADJECTIVES.has(word)) return adjectiveSet(word);
+  if (VERBS.has(word)) return verbSet(word);
+  if (SAY_ONLY.has(word)) return sayOnlySet(word);
   return {
     phrase: PHRASE_FRAMES[pick(word, "p", PHRASE_FRAMES.length)](word),
     easy: EASY_FRAMES[pick(word, "e", EASY_FRAMES.length)](word),
