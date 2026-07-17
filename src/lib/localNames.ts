@@ -7,7 +7,9 @@
 // The cloud database only ever stores the random access_code + clinical content.
 
 export type LocalChild = {
-  nickname: string;   // child's name — clinician's eyes only, never uploaded
+  // Optional because a child synced from the cloud (e.g. before the name key is
+  // imported on this device) has a code but no local name yet.
+  nickname?: string;  // child's name — clinician's eyes only, never uploaded
   contact?: string;   // parent email/phone — so she knows who to send the link to
   code?: string;      // the child's access_code, cached for showing the link
 };
@@ -22,7 +24,7 @@ export function loadLocalNames(): Record<string, LocalChild> {
   }
 }
 
-export function setLocalName(childId: string, entry: LocalChild): void {
+export function setLocalName(childId: string, entry: Partial<LocalChild>): void {
   const all = loadLocalNames();
   all[childId] = { ...all[childId], ...entry };
   localStorage.setItem(KEY, JSON.stringify(all));
