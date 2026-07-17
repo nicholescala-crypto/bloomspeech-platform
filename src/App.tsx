@@ -4,6 +4,7 @@ import AuthCallbackPage from "./pages/AuthCallbackPage";
 import ParentDashboardPage from "./pages/ParentDashboardPage";
 import HomePracticePage from "./pages/HomePracticePage";
 import ClinicianDashboardPage from "./pages/ClinicianDashboardPage";
+import HomeworkLinkPage from "./pages/HomeworkLinkPage";
 import PlayPage from "./pages/PlayPage";
 import RewardsShopPage from "./pages/RewardsShopPage";
 import SuperheroGame from "./pages/SuperheroGame";
@@ -115,6 +116,13 @@ export default function App() {
 
 // Routes that carry no PHI and don't require a session.
 function renderPublicRoute(path: string) {
+  // Family homework link: /h/<access_code>. No login — the code is the key,
+  // resolved server-side by the locked get_homework() function. De-identified,
+  // so it renders without a session like the other public routes.
+  if (path.startsWith("/h/")) {
+    const code = path.slice(3).replace(/\/+$/, "");
+    return <HomeworkLinkPage code={code} />;
+  }
   if (path === "/superhero-game") return <SuperheroGame />;
   if (path === "/ocean-game") return <OceanGame />;
   if (path === "/play" || path === "/practice") return <PlayPage />;

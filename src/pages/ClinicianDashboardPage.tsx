@@ -2,13 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase.ts";
 import { getSessionEmail, signOut } from "../lib/auth.ts";
 import { logPhiView } from "../lib/audit.ts";
+import {
+  loadLocalNames,
+  setLocalName,
+  removeLocalName,
+  exportLocalNames,
+  importLocalNames,
+  type LocalChild,
+} from "../lib/localNames.ts";
 import { generateSentences } from "../games/data/sentenceBank.ts";
 import { WORD_EMOJIS, DEFAULT_WORD_EMOJI } from "../games/data/wordEmojis";
 import { wordsForSound } from "../games/data/wordBank";
 type ChildProfile = {
   id: string;
-  child_name: string;
-  parent_email: string;
+  access_code?: string;
+  // Legacy identifier columns — present only until the Stage 2 scrub. The cloud
+  // stops storing these; names now live on-device via localNames.
+  child_name?: string;
+  parent_email?: string;
   clinician_email?: string;
   created_at?: string;
 };
@@ -16,8 +27,8 @@ type ChildProfile = {
 type PracticeAssignment = {
   id: string;
   child_id: string;
-  child_name: string;
-  parent_email: string;
+  child_name?: string;
+  parent_email?: string;
   clinician_email?: string;
   target_sound?: string;
   target_position?: string;
@@ -138,6 +149,63 @@ export default function ClinicianDashboardPage() {
 
   const [clinicianEmail, setClinicianEmail] = useState("");
 
+  // On-device name map (child id -> nickname/contact/code). Never uploaded.
+  const [localNames, setLocalNames] = useState<Record<string, LocalChild>>({});
+
+  // Show a child's name from the on-device map. Falls back to any legacy cloud
+  // name (pre-scrub) and finally to a short code label.
+  function nameFor(childId: string, code?: string): string {
+    const local = localNames[childId]?.nickname;
+    if (local) return local;
+    return code ? `Family ${code.slice(0, 6)}…` : "(unnamed)";
+  }
+
+  function linkFor(code?: string): string {
+    return code ? `${window.location.origin}/h/${code}` : "";
+  }
+
+  async function copyLink(code?: string) {
+    const link = linkFor(code);
+    if (!link) { alert("This family has no link yet."); return; }
+    try { await navigator.clipboard.writeText(link); alert("Link copied:\n\n" + link); }
+    catch { window.prompt("Copy this family's link:", link); }
+  }
+
+  async function regenerateLink(childId: string) {
+    if (!window.confirm("Make a NEW link for this family? Their old link will stop working.")) return;
+    const { data, error } = await supabase.rpc("regenerate_access_code", { p_child_id: childId });
+    if (error) { alert("Could not make a new link: " + error.message); return; }
+    setLocalName(childId, { code: String(data) });
+    setLocalNames(loadLocalNames());
+    await loadData(clinicianEmail);
+    alert("New link (send this to the family):\n\n" + linkFor(String(data)));
+  }
+
+  // Back up the on-device name key to a file the clinician saves on her Mac.
+  function downloadNameKey() {
+    const blob = new Blob([exportLocalNames()], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "bloom-family-name-key.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importNameKey(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        importLocalNames(String(reader.result));
+        setLocalNames(loadLocalNames());
+        alert("Name key loaded onto this device.");
+      } catch {
+        alert("That file didn't look like a valid name key.");
+      }
+    };
+    reader.readAsText(file);
+  }
+
   // Words shown in the picker: auto-filtered to the selected sound + position.
   const gridWords = useMemo(() => {
     if (MULTISYLLABIC_BY_COUNT[targetSound]) return MULTISYLLABIC_BY_COUNT[targetSound];
@@ -198,6 +266,13 @@ export default function ClinicianDashboardPage() {
 
     setChildren(childrenData || []);
     setAssignments(assignmentData || []);
+
+    // Cache each child's current access_code into the on-device map so links
+    // keep showing even if it was only ever generated server-side.
+    (childrenData || []).forEach((child) => {
+      if (child.access_code) setLocalName(child.id, { code: child.access_code });
+    });
+    setLocalNames(loadLocalNames());
     setLoading(false);
 
     // Audit: record that this clinician accessed their caseload (PHI).
@@ -214,34 +289,44 @@ export default function ClinicianDashboardPage() {
 
   async function addChild() {
     const cleanChildName = childName.trim();
-    const cleanParentEmail = parentEmail.trim().toLowerCase();
+    const cleanContact = parentEmail.trim();
 
     if (!cleanChildName) {
       alert("Please enter the child name.");
       return;
     }
 
-    if (!cleanParentEmail) {
-      alert("Please enter the parent email.");
+    // The cloud row carries NO name or email — only the clinician tag. The DB
+    // generates the access_code automatically; we read it back for the link.
+    const { data, error } = await supabase
+      .from("children")
+      .insert({ clinician_email: clinicianEmail })
+      .select("id, access_code")
+      .single();
+
+    if (error || !data) {
+      alert("Could not add child: " + (error?.message || "no row returned"));
       return;
     }
 
-    const { error } = await supabase.from("children").insert({
-      child_name: cleanChildName,
-      parent_email: cleanParentEmail,
-      clinician_email: clinicianEmail,
+    // Name + contact stay ON THIS DEVICE only.
+    setLocalName(data.id, {
+      nickname: cleanChildName,
+      contact: cleanContact || undefined,
+      code: data.access_code,
     });
-
-    if (error) {
-      alert("Could not add child: " + error.message);
-      return;
-    }
+    setLocalNames(loadLocalNames());
 
     setChildName("");
     setParentEmail("");
     await loadData(clinicianEmail);
 
-    alert("Child added.");
+    alert(
+      `Added ${cleanChildName}.\n\n` +
+        `Their private homework link (send this to the family):\n\n` +
+        linkFor(data.access_code) +
+        `\n\nReminder: back up your name list (button in the Children section) so you don't lose who's who.`
+    );
   }
 
   function toggleWord(word: string) {
@@ -284,12 +369,9 @@ export default function ClinicianDashboardPage() {
       return;
     }
 
+    // No name/email on the assignment — it links to the child by child_id only.
     const { error } = await supabase.from("assignments").insert({
       child_id: selectedChild.id,
-      child_name: selectedChild.child_name,
-      parent_email: selectedChild.parent_email
-        ? String(selectedChild.parent_email).trim().toLowerCase()
-        : "",
       clinician_email: clinicianEmail,
       target_sound: targetSound,
       target_position: targetPosition,
@@ -307,7 +389,7 @@ export default function ClinicianDashboardPage() {
     setClinicianNote("");
     await loadData(clinicianEmail);
 
-    alert("Assignment saved for " + selectedChild.child_name);
+    alert("Assignment saved for " + nameFor(selectedChild.id, selectedChild.access_code));
   }
 
   async function deleteChild(childId: string) {
@@ -331,6 +413,8 @@ export default function ClinicianDashboardPage() {
       setSelectedChildId("");
     }
 
+    removeLocalName(childId);
+    setLocalNames(loadLocalNames());
     await loadData(clinicianEmail);
   }
 
@@ -376,7 +460,8 @@ export default function ClinicianDashboardPage() {
           </h1>
 
           <p style={{ color: "#567", fontSize: 18 }}>
-            Add children, link parent emails, and assign speech homework.
+            Add children and assign speech homework. Names stay on this device —
+            the cloud only stores each family's private link.
           </p>
 
           {clinicianEmail && (
@@ -415,8 +500,7 @@ export default function ClinicianDashboardPage() {
             <input
               value={parentEmail}
               onChange={(event) => setParentEmail(event.target.value)}
-              placeholder="Parent email"
-              type="email"
+              placeholder="Parent contact (optional, stays on this device)"
               style={inputStyle}
             />
 
@@ -424,6 +508,10 @@ export default function ClinicianDashboardPage() {
               Add Child
             </button>
           </div>
+          <p style={{ color: "#789", fontSize: 13, margin: "4px 2px 0" }}>
+            🔒 The child's name and parent contact are saved only in this browser,
+            never uploaded. You'll get a private link to send the family.
+          </p>
         </section>
 
         <section style={cardStyle}>
@@ -446,7 +534,7 @@ export default function ClinicianDashboardPage() {
                   <option value="">Choose child</option>
                   {children.map((child) => (
                     <option key={child.id} value={child.id}>
-                      {child.child_name} — {child.parent_email}
+                      {nameFor(child.id, child.access_code)}
                     </option>
                   ))}
                 </select>
@@ -756,30 +844,69 @@ export default function ClinicianDashboardPage() {
         </section>
 
         <section style={cardStyle}>
-          <h2 style={{ marginTop: 0, color: "#163b3f" }}>Children</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+            <h2 style={{ margin: 0, color: "#163b3f" }}>Children</h2>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={downloadNameKey} style={tealButtonStyle}>
+                ⬇ Back up name list
+              </button>
+              <label style={{ ...tealButtonStyle, background: "#e2e8f0", color: "#163b3f", display: "inline-block" }}>
+                ⬆ Restore
+                <input
+                  type="file"
+                  accept="application/json"
+                  style={{ display: "none" }}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) importNameKey(f); e.target.value = ""; }}
+                />
+              </label>
+            </div>
+          </div>
+          <p style={{ color: "#789", fontSize: 13, margin: "0 0 14px" }}>
+            🔒 Names below come from this device only. <strong>Back up the name list</strong> and
+            keep it somewhere safe on your Mac (not iCloud) — it's the only record of who each link belongs to.
+          </p>
 
           {children.length === 0 ? (
             <p style={{ color: "#567" }}>No children added yet.</p>
           ) : (
             <div style={cardGridStyle}>
-              {children.map((child) => (
-                <div key={child.id} style={smallCardStyle}>
-                  <h3 style={{ color: "#163b3f", marginTop: 0 }}>
-                    {child.child_name}
-                  </h3>
+              {children.map((child) => {
+                const local = localNames[child.id];
+                const code = child.access_code || local?.code;
+                return (
+                  <div key={child.id} style={smallCardStyle}>
+                    <h3 style={{ color: "#163b3f", marginTop: 0 }}>
+                      {nameFor(child.id, code)}
+                    </h3>
 
-                  <p style={{ color: "#567" }}>
-                    <strong>Parent email:</strong> {child.parent_email}
-                  </p>
+                    {local?.contact && (
+                      <p style={{ color: "#567", fontSize: 13 }}>
+                        <strong>Contact:</strong> {local.contact}
+                      </p>
+                    )}
 
-                  <button
-                    onClick={() => deleteChild(child.id)}
-                    style={deleteButtonStyle}
-                  >
-                    Delete Child
-                  </button>
-                </div>
-              ))}
+                    <p style={{ color: "#567", fontSize: 12, wordBreak: "break-all", background: "#eef4f3", padding: "8px 10px", borderRadius: 10 }}>
+                      {linkFor(code) || "No link yet — reload after running the DB setup."}
+                    </p>
+
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button onClick={() => copyLink(code)} style={{ ...tealButtonStyle, padding: "8px 12px", fontSize: 13 }}>
+                        Copy link
+                      </button>
+                      <button onClick={() => regenerateLink(child.id)} style={{ ...tealButtonStyle, padding: "8px 12px", fontSize: 13, background: "#e2e8f0", color: "#163b3f" }}>
+                        New link
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => deleteChild(child.id)}
+                      style={deleteButtonStyle}
+                    >
+                      Delete Child
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>
@@ -796,12 +923,8 @@ export default function ClinicianDashboardPage() {
               {assignments.map((assignment) => (
                 <div key={assignment.id} style={smallCardStyle}>
                   <h3 style={{ color: "#163b3f", marginTop: 0 }}>
-                    {assignment.child_name}
+                    {nameFor(assignment.child_id)}
                   </h3>
-
-                  <p style={{ color: "#567" }}>
-                    <strong>Parent email:</strong> {assignment.parent_email}
-                  </p>
 
                   <p style={{ color: "#567" }}>
                     <strong>Sound:</strong> {assignment.target_sound}
