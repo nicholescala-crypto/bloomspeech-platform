@@ -267,10 +267,17 @@ export default function ClinicianDashboardPage() {
     setChildren(childrenData || []);
     setAssignments(assignmentData || []);
 
-    // Cache each child's current access_code into the on-device map so links
-    // keep showing even if it was only ever generated server-side.
+    // Cache each child's access_code on-device, and — ONE-TIME MIGRATION — pull
+    // any name/email still in the cloud onto this device so it survives the
+    // Stage 2 scrub. Gap-fill only: never overwrites a name already set locally,
+    // and after the scrub (cloud names null) this does nothing.
     (childrenData || []).forEach((child) => {
-      if (child.access_code) setLocalName(child.id, { code: child.access_code });
+      const existing = loadLocalNames()[child.id];
+      const patch: Partial<LocalChild> = {};
+      if (child.access_code) patch.code = child.access_code;
+      if (!existing?.nickname && child.child_name) patch.nickname = child.child_name;
+      if (!existing?.contact && child.parent_email) patch.contact = child.parent_email;
+      if (Object.keys(patch).length) setLocalName(child.id, patch);
     });
     setLocalNames(loadLocalNames());
     setLoading(false);
