@@ -134,6 +134,7 @@ export default function HomeworkLinkPage({ code }: { code: string }) {
             { label: "🌻 Bloom Garden", route: "/garden-game", bg: "linear-gradient(135deg,#5bbf5b,#3f9d4a)" },
             { label: "🦸 Superhero", route: "/superhero-game", bg: "linear-gradient(135deg,#2563EB,#7C3AED)" },
             { label: "🌊 Ocean", route: "/ocean-game", bg: "linear-gradient(135deg,#2B6CB0,#4ECDC4)" },
+            { label: "📖 Picture Words", route: "/vocabulary-game", bg: "linear-gradient(135deg,#4aa6c4,#2b6f86)" },
           ];
 
           return (

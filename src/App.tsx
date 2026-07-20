@@ -14,6 +14,7 @@ import SpaceGame from "./pages/SpaceGame";
 import PizzaGame from "./pages/PizzaGame";
 import TowerGame from "./pages/TowerGame";
 import GardenGame from "./pages/GardenGame";
+import VocabularyGame from "./pages/VocabularyGame";
 import { getSessionRole, type Role } from "./lib/auth";
 
 function NotFoundPage() {
@@ -136,6 +137,8 @@ function renderPublicRoute(path: string) {
     return <TowerGame />;
   if (path === "/garden-game" || path === "/garden" || path === "/bloom-garden")
     return <GardenGame />;
+  if (path === "/vocabulary-game" || path === "/vocabulary" || path === "/picture-words")
+    return <VocabularyGame />;
   if (path === "/rewards" || path === "/shop") return <RewardsShopPage />;
   return null;
 }
