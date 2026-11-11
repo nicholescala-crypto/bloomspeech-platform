@@ -1,726 +1,465 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { WORD_EMOJIS, DEFAULT_WORD_EMOJI } from "../games/data/wordEmojis";
+import { useEffect, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { speak, sfx, unlockAudio } from "../games/audio";
 
-// Read the child's assigned sound + words from the URL (?sound=&words=).
-// When present, the game plays exactly those words instead of its own bank.
-function readAssigned() {
+// ---------------------------------------------------------------------------
+// Superhero: the child designs a hero (cape color + chest symbol). Grumpy,
+// silly villains are causing trouble. For each word the child SAYS IT TWICE
+// (grown-up taps Got it / Try again; every try counts), then DRAGS a super
+// power onto the villain (freeze, bubble, tickle, glitter). Each power does
+// something different. After a few powers the villain cheers up and joins the
+// team, so the child ends with a team of new friends. Nobody is ever laughed at.
+// ---------------------------------------------------------------------------
+
+type Phase = "intro" | "say" | "power" | "friend" | "done";
+type Try = "got" | "effort";
+type Power = "freeze" | "bubble" | "tickle" | "glitter";
+type VillainKey = "cloud" | "sock" | "robot";
+
+const SAYS_PER_WORD = 2;
+const CAPES = [
+  { name: "Red", color: "#e53935" },
+  { name: "Blue", color: "#1e88e5" },
+  { name: "Purple", color: "#8e24aa" },
+  { name: "Green", color: "#43a047" },
+];
+type Emblem = "star" | "bolt" | "heart";
+const POWERS: Record<Power, { label: string; color: string; react: string }> = {
+  freeze: { label: "Freeze ray", color: "#4fc3f7", react: "Brrr! Frozen still!" },
+  bubble: { label: "Bubble trap", color: "#b39ddb", react: "Stuck in a bubble! Boing!" },
+  tickle: { label: "Tickle ray", color: "#f48fb1", react: "Hee hee hee! That tickles!" },
+  glitter: { label: "Glitter blast", color: "#ffd54f", react: "Ooh, so sparkly!" },
+};
+const VILLAINS: Record<VillainKey, { name: string; trouble: string; friendly: string }> = {
+  cloud: { name: "Grumble Cloud", trouble: "is raining on the playground!", friendly: "I'm not grumpy anymore! Can I make rainbows instead?" },
+  sock: { name: "Sneaky Sock Monster", trouble: "took everyone's socks!", friendly: "Sorry! I was just cold. Here are the socks back!" },
+  robot: { name: "Bossy Bot", trouble: "is telling everyone what to do!", friendly: "Beep boop! I'd rather play together. Friends?" },
+};
+const VILLAIN_ORDER: VillainKey[] = ["cloud", "sock", "robot"];
+
+function readParams() {
   const p = new URLSearchParams(window.location.search);
   const sound = (p.get("sound") || p.get("targetSound") || "").replace(/\//g, "").toLowerCase();
   const words = (p.get("words") || "").split(",").map((w) => w.trim()).filter(Boolean);
   return { sound, words };
 }
 
-// ── types ────────────────────────────────────────────────────────
-type GamePhase = "intro" | "playing" | "correct" | "wrong" | "victory" | "complete";
-
-interface WordCard {
-  word: string;
-  used: boolean;
-  correct: boolean | null;
+function shuffle<T>(a: T[]): T[] {
+  const b = a.slice();
+  for (let i = b.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [b[i], b[j]] = [b[j], b[i]];
+  }
+  return b;
 }
 
-// ── word banks per sound ─────────────────────────────────────────
-const WORD_BANKS: Record<string, string[]> = {
-  r:  ["rocket","robot","rainbow","river","rabbit","ring","roof","race","rope","rock","rain","road","rose","ruler","radio"],
-  s:  ["sun","star","soup","sock","seal","sand","sail","seed","salt","soap","sit","six","side","safe","save"],
-  l:  ["lion","leaf","lamp","lake","log","lime","lip","lid","lock","lace","lane","lava","leap","lift","link"],
-  ch: ["chair","cheese","chain","cherry","chicken","chalk","chin","chip","chest","cheer","chop","check","chose","chill","chat"],
-  sh: ["ship","shoe","sheep","shell","shop","shark","shade","shake","sharp","shelf","shift","shine","shore","shot","shout"],
-  th: ["thumb","three","throne","thread","throw","thick","thin","thorn","thought","thaw","theme","thermal","thrill","throne","thud"],
-  k:  ["king","kite","kitten","kick","keep","key","kind","knee","kneel","knock","kit","kid","kin","kelp","kern"],
-  g:  ["game","gold","gate","gift","goat","grape","grass","great","green","grin","grip","grow","guard","guide","gulp"],
-  f:  ["fish","fox","frog","fire","flag","flip","flow","foam","fold","foot","fork","form","fort","foul","four"],
-  v:  ["vase","vine","vest","van","vet","vim","void","volt","vote","vow","vale","vast","veal","veer","veil"],
-  st: ["stop","star","step","stem","stick","stone","storm","stove","straw","stream","street","string","strong","stuck","stump"],
-  sp: ["spin","spot","space","speak","speed","spell","spend","spill","spine","spit","splash","split","spoke","spoon","sport"],
-  bl: ["blue","black","blank","blast","blaze","bleed","blend","bless","blind","block","bloom","blow","bluff","blur","blurt"],
-  gr: ["green","grab","grace","grade","grain","grand","grape","grass","grave","gray","graze","greet","grill","grip","grin"],
-  tr: ["tree","track","trade","trail","train","trap","trash","treat","trick","trim","trip","truck","true","trunk","trust"],
-  pr: ["price","pray","press","print","prize","probe","proud","prove","prom","prop","prank","prawn","prep","prey","prod"],
-  fr: ["frog","frame","free","fresh","from","front","frost","frown","fruit","fry","frank","frail","fray","freak","Fred"],
-  dr: ["drum","draw","dream","dress","drift","drink","drip","drive","drop","drove","drown","drug","dry","drape","drain"],
-  sw: ["swim","swan","swap","swat","sweep","sweet","swift","swing","swipe","swoop","swore","swarm","sway","swear","sweat"],
-  sn: ["snake","snap","snack","snag","snail","snare","sneak","sniff","snob","snore","snort","snout","snow","snug","sniff"],
-  default: ["sun","star","moon","tree","boat","bird","fish","frog","duck","bear","wolf","hawk","dove","crow","wren"],
-};
-
-function getWords(sound: string, count = 10): string[] {
-  const key = sound?.toLowerCase().replace(/[^a-z]/g, "") || "default";
-  const pool = WORD_BANKS[key] || WORD_BANKS.default;
-  const shuffled = [...pool].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, Math.min(count, shuffled.length));
+// 3 villains; 3 or 4 words each depending on how many words were assigned.
+function buildRounds(words: string[]): string[][] {
+  const per = words.length >= 10 ? 4 : 3;
+  const q: string[] = [];
+  while (q.length < per * 3) {
+    let round = shuffle(words);
+    if (q.length && round[0] === q[q.length - 1] && round.length > 1) round = [...round.slice(1), round[0]];
+    q.push(...round);
+  }
+  return [0, 1, 2].map((i) => q.slice(i * per, (i + 1) * per));
 }
 
-// ── villain roster ───────────────────────────────────────────────
-const VILLAINS = [
-  { name: "Dr. Mumble",   emoji: "🦹",  color: "#6B21A8", weakness: "clear sounds" },
-  { name: "The Silencer", emoji: "🤐",  color: "#1E3A8A", weakness: "loud voices"  },
-  { name: "Chaos Bot",    emoji: "👾",  color: "#991B1B", weakness: "practice"     },
-  { name: "Word Wraith",  emoji: "👻",  color: "#065F46", weakness: "confidence"   },
-  { name: "Fuzz Face",    emoji: "🧟",  color: "#92400E", weakness: "accuracy"     },
-];
+function goBack() {
+  if (window.history.length > 1) window.history.back();
+  else window.location.href = "/";
+}
 
-// ── hero roster ──────────────────────────────────────────────────
-const HEROES = [
-  { name: "Sound Striker", emoji: "🦸",    color: "#2563EB" },
-  { name: "Voice Viper",   emoji: "🦸‍♀️", color: "#7C3AED" },
-  { name: "Echo Eagle",    emoji: "🦅",    color: "#0891B2" },
-];
+// ── Drawings ───────────────────────────────────────────────────────
+function EmblemShape({ e, cx, cy, r, fill }: { e: Emblem; cx: number; cy: number; r: number; fill: string }) {
+  if (e === "star") {
+    const pts = Array.from({ length: 10 }, (_, i) => {
+      const rr = i % 2 ? r * 0.45 : r;
+      const a = (Math.PI / 5) * i - Math.PI / 2;
+      return `${cx + rr * Math.cos(a)},${cy + rr * Math.sin(a)}`;
+    }).join(" ");
+    return <polygon points={pts} fill={fill} />;
+  }
+  if (e === "bolt") return <polygon points={`${cx + r * 0.2},${cy - r} ${cx - r * 0.6},${cy + r * 0.1} ${cx},${cy + r * 0.1} ${cx - r * 0.2},${cy + r} ${cx + r * 0.6},${cy - r * 0.1} ${cx},${cy - r * 0.1}`} fill={fill} />;
+  return <path d={`M${cx} ${cy + r * 0.8} C${cx - r * 1.4} ${cy - r * 0.1} ${cx - r * 0.7} ${cy - r * 1.2} ${cx} ${cy - r * 0.4} C${cx + r * 0.7} ${cy - r * 1.2} ${cx + r * 1.4} ${cy - r * 0.1} ${cx} ${cy + r * 0.8} Z`} fill={fill} />;
+}
 
-// ── star rating ──────────────────────────────────────────────────
-function Stars({ count, total = 3 }: { count: number; total?: number }) {
+function Hero({ cape, emblem, size = 140, pose = "stand" }: { cape: string; emblem: Emblem; size?: number; pose?: "stand" | "zap" }) {
   return (
-    <span style={{ fontSize: 20, letterSpacing: 2 }}>
-      {"⭐".repeat(count)}{"☆".repeat(Math.max(0, total - count))}
-    </span>
+    <svg viewBox="0 0 100 140" width={size * 0.72} height={size} style={{ overflow: "visible", display: "block" }}>
+      <path d="M30 46 L14 128 Q50 118 86 128 L70 46 Z" fill={cape} />
+      <rect x="34" y="44" width="32" height="44" rx="10" fill="#3949ab" />
+      <circle cx="50" cy="64" r="11" fill="#fff" />
+      <EmblemShape e={emblem} cx={50} cy={64} r={8} fill={cape} />
+      <rect x="36" y="86" width="12" height="34" rx="5" fill="#3949ab" />
+      <rect x="52" y="86" width="12" height="34" rx="5" fill="#3949ab" />
+      <rect x="34" y="116" width="16" height="10" rx="4" fill={cape} />
+      <rect x="50" y="116" width="16" height="10" rx="4" fill={cape} />
+      {pose === "zap" ? <rect x="64" y="46" width="30" height="10" rx="5" fill="#3949ab" /> : <rect x="64" y="48" width="10" height="30" rx="5" fill="#3949ab" />}
+      <rect x="26" y="48" width="10" height="30" rx="5" fill="#3949ab" />
+      <circle cx="50" cy="28" r="18" fill="#f2c6a0" />
+      <path d="M32 24 Q36 8 50 8 Q66 8 68 24 Q60 16 50 18 Q40 16 32 24 Z" fill="#4e342e" />
+      <rect x="35" y="22" width="30" height="9" rx="4" fill={cape} />
+      <circle cx="43" cy="27" r="2.6" fill="#222" /><circle cx="57" cy="27" r="2.6" fill="#222" />
+      <path d="M43 36 Q50 42 57 36" stroke="#7b1f1f" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+    </svg>
   );
 }
 
-// ── power bar ────────────────────────────────────────────────────
-function PowerBar({ power, max }: { power: number; max: number }) {
-  const pct = Math.round((power / max) * 100);
-  const color = pct > 66 ? "#10B981" : pct > 33 ? "#F59E0B" : "#EF4444";
+function Villain({ v, friendly, effect, size = 150 }: { v: VillainKey; friendly: boolean; effect: Power | null; size?: number }) {
+  const mouth = friendly ? <path d="M38 76 Q50 88 62 76" stroke="#333" strokeWidth="4" fill="none" strokeLinecap="round" />
+    : effect === "tickle" ? <ellipse cx="50" cy="78" rx="10" ry="8" fill="#5d1f1f" />
+    : <path d="M38 82 Q50 72 62 82" stroke="#333" strokeWidth="4" fill="none" strokeLinecap="round" />;
+  const brows = friendly ? null : <><path d="M32 48 L44 52" stroke="#333" strokeWidth="3.5" /><path d="M68 48 L56 52" stroke="#333" strokeWidth="3.5" /></>;
+  const eyes = <><circle cx="40" cy="60" r="5" fill="#222" /><circle cx="60" cy="60" r="5" fill="#222" /></>;
+  let body: ReactNode;
+  if (v === "cloud") {
+    body = (
+      <>
+        <path d="M18 80 Q4 80 6 64 Q8 48 26 50 Q28 28 50 30 Q70 26 76 46 Q96 44 94 64 Q94 82 76 82 Z" fill={friendly ? "#e3f2fd" : "#78909c"} />
+        {!friendly && [26, 46, 66].map((x) => <path key={x} d={`M${x} 90 l-4 10`} stroke="#4fc3f7" strokeWidth="3" />)}
+        {friendly && <path d="M10 98 A40 30 0 0 1 90 98" stroke="#ffb74d" strokeWidth="5" fill="none" />}
+      </>
+    );
+  } else if (v === "sock") {
+    body = (
+      <>
+        <path d="M30 10 H66 V64 Q66 96 40 96 Q18 96 18 80 Q18 66 30 64 Z" fill={friendly ? "#a5d6a7" : "#9575cd"} />
+        <rect x="30" y="10" width="36" height="12" fill={friendly ? "#81c784" : "#7e57c2"} />
+        {[26, 40, 54].map((y) => <rect key={y} x="30" y={y} width="36" height="4" fill="rgba(255,255,255,.35)" />)}
+      </>
+    );
+  } else {
+    body = (
+      <>
+        <line x1="50" y1="14" x2="50" y2="26" stroke="#607d8b" strokeWidth="3" /><circle cx="50" cy="12" r="5" fill={friendly ? "#66bb6a" : "#ef5350"} />
+        <rect x="20" y="26" width="60" height="66" rx="12" fill={friendly ? "#b0bec5" : "#90a4ae"} />
+        <rect x="30" y="50" width="40" height="22" rx="6" fill="#eceff1" />
+      </>
+    );
+  }
   return (
-    <div style={{ width: "100%", background: "rgba(255,255,255,0.15)", borderRadius: 20, height: 14, overflow: "hidden" }}>
-      <div style={{
-        width: `${pct}%`, height: "100%",
-        background: `linear-gradient(90deg, ${color}, ${color}cc)`,
-        borderRadius: 20,
-        transition: "width 0.5s ease",
-        boxShadow: `0 0 8px ${color}`,
-      }} />
+    <svg viewBox="0 0 100 110" width={size} height={size * 1.1} style={{ overflow: "visible", display: "block" }}
+      className={effect === "tickle" && !friendly ? "sh-wiggle" : friendly ? "sh-bounce" : "sh-hover"}>
+      {body}
+      {v === "robot" ? <g transform="translate(0 2)">{eyes}{brows}{mouth}</g> : <g>{eyes}{brows}{mouth}</g>}
+      {effect === "freeze" && !friendly && <rect x="2" y="4" width="96" height="100" rx="14" fill="rgba(179,229,252,.55)" stroke="#81d4fa" strokeWidth="3" />}
+      {effect === "bubble" && !friendly && <circle cx="50" cy="56" r="54" fill="rgba(209,196,233,.35)" stroke="#b39ddb" strokeWidth="3" />}
+      {effect === "glitter" && !friendly && [[14, 20], [86, 24], [20, 92], [84, 88], [50, 6]].map(([x, y], i) => (
+        <polygon key={i} points={`${x},${y - 7} ${x + 2},${y - 2} ${x + 7},${y} ${x + 2},${y + 2} ${x},${y + 7} ${x - 2},${y + 2} ${x - 7},${y} ${x - 2},${y - 2}`} fill="#ffd54f" className="sh-twinkle" />
+      ))}
+    </svg>
+  );
+}
+
+function PowerIcon({ p, size = 56 }: { p: Power; size?: number }) {
+  const c = POWERS[p].color;
+  return (
+    <svg viewBox="0 0 60 60" width={size} height={size}>
+      <circle cx="30" cy="30" r="27" fill={c} stroke="rgba(0,0,0,.2)" strokeWidth="2" />
+      {p === "freeze" && <g stroke="#fff" strokeWidth="3.5" strokeLinecap="round"><path d="M30 12 V48 M14 21 L46 39 M14 39 L46 21" /></g>}
+      {p === "bubble" && <><circle cx="26" cy="32" r="11" fill="none" stroke="#fff" strokeWidth="3" /><circle cx="40" cy="20" r="6" fill="none" stroke="#fff" strokeWidth="3" /></>}
+      {p === "tickle" && <path d="M14 40 Q22 14 30 30 Q38 46 46 18" stroke="#fff" strokeWidth="4" fill="none" strokeLinecap="round" />}
+      {p === "glitter" && <polygon points="30,10 34,26 50,30 34,34 30,50 26,34 10,30 26,26" fill="#fff" />}
+    </svg>
+  );
+}
+
+function WordPic({ word, size }: { word: string; size: number }) {
+  const [missing, setMissing] = useState(false);
+  if (missing)
+    return (
+      <div style={{ width: size, height: size, borderRadius: 16, background: "#fff4e0", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: size / 5, margin: "0 auto", color: "#1a237e" }}>
+        {word}
+      </div>
+    );
+  return <img src={`/Images/${word.toLowerCase()}.png`} alt={word} onError={() => setMissing(true)} draggable={false}
+    style={{ width: size, height: size, objectFit: "contain", borderRadius: 16, background: "#fff", display: "block", margin: "0 auto" }} />;
+}
+
+function Draggable({ children, onDrop, onTap }: { children: ReactNode; onDrop: (x: number, y: number) => void; onTap: () => void }) {
+  const [off, setOff] = useState({ x: 0, y: 0 });
+  const [drag, setDrag] = useState<{ sx: number; sy: number } | null>(null);
+  function down(e: ReactPointerEvent<HTMLDivElement>) {
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* dragging still works */ }
+    setDrag({ sx: e.clientX, sy: e.clientY });
+  }
+  function move(e: ReactPointerEvent<HTMLDivElement>) {
+    if (drag) setOff({ x: e.clientX - drag.sx, y: e.clientY - drag.sy });
+  }
+  function up(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!drag) return;
+    const moved = Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 10;
+    setDrag(null);
+    setOff({ x: 0, y: 0 });
+    if (moved) onDrop(e.clientX, e.clientY);
+    else onTap();
+  }
+  return (
+    <div onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { setDrag(null); setOff({ x: 0, y: 0 }); }}
+      style={{ transform: `translate(${off.x}px, ${off.y}px)`, transition: drag ? "none" : "transform .25s", cursor: drag ? "grabbing" : "grab", touchAction: "none", userSelect: "none", position: "relative", zIndex: drag ? 20 : 1 }}>
+      {children}
     </div>
   );
 }
 
-// Real photo for a word (/Images/<word>.png) with emoji fallback.
-function WordImage({ word, size }: { word: string; size: number }) {
-  const [err, setErr] = useState(false);
-  useEffect(() => setErr(false), [word]);
-  if (err) return <span style={{ fontSize: size * 0.9, lineHeight: 1 }}>{WORD_EMOJIS[word.toLowerCase()] || DEFAULT_WORD_EMOJI}</span>;
-  return <img src={`/Images/${word}.png`} alt={word} onError={() => setErr(true)} style={{ width: size, height: size, objectFit: "contain", borderRadius: 16, background: "rgba(255,255,255,0.92)" }} />;
-}
+const CSS = `
+.sh-page{min-height:100vh;font-family:'Nunito',system-ui,Arial,sans-serif;background:linear-gradient(#1a237e,#3949ab 60%,#7986cb);color:#fff;padding:14px 14px 30px;box-sizing:border-box}
+.sh-wrap{max-width:720px;margin:0 auto}
+.sh-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.sh-chip{background:rgba(255,255,255,.15);border:none;color:#fff;font-weight:800;border-radius:12px;padding:8px 14px;cursor:pointer;font-family:inherit;font-size:15px}
+.sh-card{background:#fff;color:#1a237e;border-radius:22px;padding:14px;text-align:center}
+.sh-big{border:none;border-radius:16px;padding:16px 12px;font-size:19px;font-weight:900;cursor:pointer;font-family:inherit;touch-action:manipulation}
+.sh-big:active{transform:scale(.97)}
+.sh-go{background:linear-gradient(135deg,#ff7043,#e53935);color:#fff;width:100%}
+.sh-got{background:#27c06b;color:#fff;box-shadow:0 4px 0 #1b8a4c}
+.sh-try{background:#f5a623;color:#1a237e;box-shadow:0 4px 0 #b97a12}
+.sh-word{font-size:34px;font-weight:900;margin:6px 0 0}
+.sh-power{display:flex;justify-content:center;gap:10px;margin:8px 0}
+.sh-cell{width:36px;height:36px;border-radius:50%;border:3px solid #c5cae9;background:#f3f4fb}
+.sh-cell.got{background:#27c06b;border-color:#1b8a4c}.sh-cell.effort{background:#f5a623;border-color:#b97a12}
+.sh-arena{display:flex;justify-content:space-around;align-items:flex-end;background:linear-gradient(#bbdefb,#e3f2fd 70%,#a5d6a7 70%);border-radius:18px;padding:10px 6px 8px;min-height:200px;position:relative}
+.sh-target{border-radius:20px;padding:4px}
+.sh-target.hot{outline:4px dashed #ffd54f}
+.sh-opts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.sh-opt{background:#f3f4fb;border:3px solid #c5cae9;border-radius:16px;padding:8px 4px;display:flex;flex-direction:column;align-items:center;gap:4px;font-weight:800;font-size:14px;color:#1a237e}
+.sh-meter{display:flex;gap:6px;justify-content:center;margin:6px 0}
+.sh-meter span{width:26px;height:12px;border-radius:6px;background:#ffcdd2}
+.sh-meter span.on{background:#66bb6a}
+.sh-hover{animation:shHover 2s ease-in-out infinite}
+@keyframes shHover{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.sh-wiggle{animation:shWiggle .25s ease-in-out infinite}
+@keyframes shWiggle{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
+.sh-bounce{animation:shBounce .7s ease-in-out infinite}
+@keyframes shBounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+.sh-twinkle{animation:shTw .5s ease-in-out infinite alternate}
+@keyframes shTw{from{opacity:.3}to{opacity:1}}
+.sh-pop{animation:shPop .5s ease-out}
+@keyframes shPop{0%{transform:scale(.5);opacity:0}70%{transform:scale(1.1);opacity:1}100%{transform:scale(1)}}
+.sh-pick{border-radius:14px;padding:6px 10px;cursor:pointer;font-family:inherit;font-weight:800;color:#fff;border:3px solid transparent}
+@media (max-width:520px){.sh-arena{min-height:170px}}
+`;
 
-// ── main game component ──────────────────────────────────────────
 export default function SuperheroGame() {
-  const assigned = useMemo(readAssigned, []);
-  const [targetSound, setTargetSound] = useState(assigned.sound || "r");
-  const [heroIndex, setHeroIndex] = useState(0);
-  const [villainIndex, setVillainIndex] = useState(0);
-  const [phase, setPhase] = useState<GamePhase>("intro");
-  const [cards, setCards] = useState<WordCard[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [power, setPower] = useState(0);
-  const [score, setScore] = useState(0);
-  const [streak, setStreak] = useState(0);
-  const [bestStreak, setBestStreak] = useState(0);
-  const [showBurst, setShowBurst] = useState(false);
-  const [villainHp, setVillainHp] = useState(5);
-  const [shake, setShake] = useState(false);
-  const [totalWords] = useState(8);
+  const [{ sound, words }] = useState(readParams);
+  const [phase, setPhase] = useState<Phase>("intro");
+  const [cape, setCape] = useState(CAPES[0].color);
+  const [emblem, setEmblem] = useState<Emblem>("star");
+  const [rounds, setRounds] = useState<string[][]>([]);
+  const [vIdx, setVIdx] = useState(0);
+  const [wIdx, setWIdx] = useState(0);
+  const [power, setPower] = useState<Try[]>([]);
+  const [secondTry, setSecondTry] = useState(false);
+  const [log, setLog] = useState<{ word: string; t: Try }[]>([]);
+  const [effect, setEffect] = useState<Power | null>(null);
+  const [choices, setChoices] = useState<Power[]>([]);
+  const [friends, setFriends] = useState<VillainKey[]>([]);
+  const [hot, setHot] = useState(false);
+  const targetRef = useRef<HTMLDivElement>(null);
+  const busy = useRef(false);
 
-  // ── recording ──
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
-  const [micError, setMicError] = useState<string | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
+  const villain = VILLAIN_ORDER[vIdx];
+  const curWord = rounds[vIdx]?.[wIdx] || "";
+  const perVillain = rounds[0]?.length || 3;
 
-  const hero = HEROES[heroIndex];
-  const villain = VILLAINS[villainIndex];
+  useEffect(() => {
+    if (phase === "say" && curWord && power.length === 0 && !secondTry) speak(curWord);
+  }, [phase, curWord]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const startGame = useCallback(() => {
+  function start() {
     unlockAudio();
-    const words = assigned.words.length ? assigned.words : getWords(targetSound, totalWords);
-    setCards(words.map(w => ({ word: w, used: false, correct: null })));
-    setCurrentIndex(0);
-    setPower(0);
-    setScore(0);
-    setStreak(0);
-    setBestStreak(0);
-    setVillainHp(words.length);
-    setPhase("playing");
-  }, [targetSound, totalWords, assigned]);
+    sfx("tap");
+    busy.current = false;
+    setRounds(buildRounds(words));
+    setVIdx(0); setWIdx(0); setPower([]); setSecondTry(false); setLog([]); setEffect(null); setFriends([]);
+    setPhase("say");
+  }
 
-  const markCorrect = useCallback(() => {
-    if (phase !== "playing") return;
+  function addTry(t: Try) {
+    const next = [...power, t];
+    setLog((l) => [...l, { word: curWord, t }]);
+    setPower(next);
+    setSecondTry(false);
+    if (next.length >= SAYS_PER_WORD) {
+      setChoices(shuffle(Object.keys(POWERS) as Power[]).slice(0, 3));
+      setEffect(null);
+      window.setTimeout(() => setPhase("power"), 450);
+    } else {
+      window.setTimeout(() => speak(curWord), 350);
+    }
+  }
+  function gotIt() { sfx("success"); addTry("got"); }
+  function tryAgain() {
+    if (!secondTry) { sfx("tap"); setSecondTry(true); speak(curWord); }
+    else { sfx("pop"); addTry("effort"); }
+  }
+
+  function firePower(p: Power) {
+    if (busy.current) return;
+    busy.current = true;
+    setEffect(p);
+    setHot(false);
     sfx("success");
-    const newStreak = streak + 1;
-    const newScore = score + (newStreak >= 3 ? 2 : 1);
-    const newPower = Math.min(power + (newStreak >= 3 ? 2 : 1), cards.length);
-    const newHp = Math.max(villainHp - 1, 0);
+    window.setTimeout(() => {
+      busy.current = false;
+      setPower([]);
+      if (wIdx + 1 < perVillain) { setWIdx(wIdx + 1); setPhase("say"); }
+      else { setFriends((f) => [...f, villain]); sfx("level"); setPhase("friend"); }
+    }, 1900);
+  }
 
-    setStreak(newStreak);
-    if (newStreak > bestStreak) setBestStreak(newStreak);
-    setScore(newScore);
-    setPower(newPower);
-    setVillainHp(newHp);
-    setShowBurst(true);
-    setTimeout(() => setShowBurst(false), 700);
+  function inTarget(x: number, y: number) {
+    const r = targetRef.current?.getBoundingClientRect();
+    return !!r && x > r.left - 30 && x < r.right + 30 && y > r.top - 30 && y < r.bottom + 30;
+  }
 
-    setCards(prev => prev.map((c, i) => i === currentIndex ? { ...c, used: true, correct: true } : c));
-    setPhase("correct");
+  function nextVillain() {
+    setEffect(null);
+    if (vIdx + 1 < VILLAIN_ORDER.length) { setVIdx(vIdx + 1); setWIdx(0); setPhase("say"); }
+    else { sfx("win"); setPhase("done"); }
+  }
 
-    setTimeout(() => {
-      if (currentIndex + 1 >= cards.length) {
-        setPhase(newHp <= 0 ? "victory" : "complete");
-      } else {
-        setCurrentIndex(i => i + 1);
-        setPhase("playing");
-      }
-    }, 900);
-  }, [phase, streak, score, power, villainHp, currentIndex, cards, bestStreak]);
-
-  const markWrong = useCallback(() => {
-    if (phase !== "playing") return;
-    sfx("fail");
-    setStreak(0);
-    setShake(true);
-    setTimeout(() => setShake(false), 500);
-    setCards(prev => prev.map((c, i) => i === currentIndex ? { ...c, used: true, correct: false } : c));
-    setPhase("wrong");
-
-    setTimeout(() => {
-      if (currentIndex + 1 >= cards.length) {
-        setPhase("complete");
-      } else {
-        setCurrentIndex(i => i + 1);
-        setPhase("playing");
-      }
-    }, 900);
-  }, [phase, currentIndex, cards]);
-
-  useEffect(() => { const w = cards[currentIndex]?.word; if (phase === "playing" && w) speak(w); }, [currentIndex, phase, cards]);
-  useEffect(() => { if (phase === "victory" || phase === "complete") sfx("win"); }, [phase]);
-
-  const startRecording = useCallback(async () => {
-    if (isRecording) return;
-    setMicError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      audioChunksRef.current = [];
-      const recorder = new MediaRecorder(stream);
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-      recorder.onstop = () => {
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        setRecordingUrl(URL.createObjectURL(blob));
-        stream.getTracks().forEach(t => t.stop());
-        streamRef.current = null;
-      };
-      mediaRecorderRef.current = recorder;
-      recorder.start();
-      setIsRecording(true);
-    } catch {
-      setMicError("We need microphone access to record. Please allow the microphone permission in your browser, then try again.");
-    }
-  }, [isRecording]);
-
-  const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop();
-    }
-    setIsRecording(false);
-  }, []);
-
-  // reset recording when moving to a new word
-  useEffect(() => {
-    setRecordingUrl(null);
-    setIsRecording(false);
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop();
-    }
-  }, [currentIndex]);
-
-  // revoke the previous object URL whenever it changes or on unmount
-  useEffect(() => {
-    return () => {
-      if (recordingUrl) URL.revokeObjectURL(recordingUrl);
-    };
-  }, [recordingUrl]);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (phase !== "playing") return;
-      if (e.key === "g" || e.key === "G") markCorrect();
-      if (e.key === "n" || e.key === "N") markWrong();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [phase, markCorrect, markWrong]);
-
-  const accuracy = cards.filter(c => c.correct === true).length;
-  const currentCard = cards[currentIndex];
-  const gameLen = cards.length || totalWords; // all assigned words (or 8 in free play)
-  const progressPct = Math.round((currentIndex / gameLen) * 100);
-
-  // ── NO HOMEWORK LOADED ───────────────────────────────────────
-  // This game must be opened from a child's assignment card so it plays
-  // the assigned words (never random ones).
-  if (!assigned.words.length) {
+  if (!words.length) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, background: "linear-gradient(160deg,#0b1530,#1e1b4b)", color: "white", fontFamily: "'Nunito',system-ui,sans-serif", textAlign: "center", padding: 24 }}>
-        <div style={{ fontSize: 60 }}>🦸</div>
-        <h1 style={{ fontSize: 24, margin: 0 }}>No homework loaded</h1>
-        <p style={{ maxWidth: 340, opacity: 0.8, lineHeight: 1.5 }}>Open your child’s practice card and tap a game there — it will play the exact words their therapist assigned.</p>
-        <button onClick={() => { window.location.href = "/parent"; }} style={{ padding: "14px 28px", borderRadius: 16, border: "none", background: "linear-gradient(135deg,#2563EB,#7C3AED)", color: "white", fontSize: 16, fontWeight: 900, cursor: "pointer" }}>
-          ← Back to my child’s card
-        </button>
+      <div className="sh-page" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <style>{CSS}</style>
+        <div className="sh-wrap" style={{ textAlign: "center" }}>
+          <h1>No homework loaded</h1>
+          <p>Open your child's homework and tap Superhero there.</p>
+          <button className="sh-big sh-go" style={{ maxWidth: 320 }} onClick={goBack}>Back to homework</button>
+        </div>
       </div>
     );
   }
 
-  // ── INTRO SCREEN ─────────────────────────────────────────────
   if (phase === "intro") {
     return (
-      <div style={pageStyle}>
-        <style>{fonts}</style>
-        <div style={{ maxWidth: 600, margin: "0 auto", padding: "32px 20px", textAlign: "center" }}>
-
-          <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: "#60A5FA", marginBottom: 8 }}>
-            ⚡ Superhero Sound Training
-          </div>
-          <h1 style={{ fontFamily: "Bangers, cursive", fontSize: "clamp(36px, 8vw, 56px)", color: "white", margin: "0 0 8px", letterSpacing: 2, textShadow: "0 0 20px rgba(96,165,250,0.5)" }}>
-            Hero Academy
-          </h1>
-          <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 16, marginBottom: 28 }}>
-            Say each word to power up your hero and defeat the villain!
-          </p>
-
-          {/* hero picker */}
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Choose your hero</div>
-            <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-              {HEROES.map((h, i) => (
-                <button key={i} onClick={() => setHeroIndex(i)} style={{
-                  background: heroIndex === i ? h.color : "rgba(255,255,255,0.08)",
-                  border: heroIndex === i ? `2px solid ${h.color}` : "2px solid rgba(255,255,255,0.15)",
-                  borderRadius: 16, padding: "12px 16px", cursor: "pointer",
-                  transition: "all 0.2s", color: "white",
-                }}>
-                  <div style={{ fontSize: 28 }}>{h.emoji}</div>
-                  <div style={{ fontSize: 11, fontWeight: 700, marginTop: 4 }}>{h.name}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* villain picker */}
-          <div style={{ marginBottom: 28 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Choose your villain</div>
-            <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-              {VILLAINS.map((v, i) => (
-                <button key={i} onClick={() => setVillainIndex(i)} style={{
-                  background: villainIndex === i ? v.color : "rgba(255,255,255,0.08)",
-                  border: villainIndex === i ? `2px solid ${v.color}` : "2px solid rgba(255,255,255,0.15)",
-                  borderRadius: 12, padding: "10px 14px", cursor: "pointer",
-                  transition: "all 0.2s", color: "white",
-                }}>
-                  <div style={{ fontSize: 22 }}>{v.emoji}</div>
-                  <div style={{ fontSize: 10, fontWeight: 700, marginTop: 3 }}>{v.name}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* sound selector — hidden when playing a child's assigned words */}
-          {assigned.words.length ? (
-            <div style={{ marginBottom: 28, padding: "12px 18px", borderRadius: 14, background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.35)" }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Your assignment</div>
-              <div style={{ fontSize: 16, fontWeight: 800, marginTop: 4 }}>{assigned.words.length} words · /{targetSound}/</div>
-            </div>
-          ) : (
-            <div style={{ marginBottom: 28 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Target sound</div>
-              <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-                {["r","s","l","ch","sh","th","k","g","f","v","st","sp","bl","gr","tr","pr","fr","dr","sw","sn"].map(s => (
-                  <button key={s} onClick={() => setTargetSound(s)} style={{
-                    fontFamily: "Bangers, cursive", fontSize: 18, letterSpacing: 1,
-                    width: 44, height: 44, borderRadius: 12,
-                    background: targetSound === s ? "#2563EB" : "rgba(255,255,255,0.08)",
-                    border: targetSound === s ? "2px solid #60A5FA" : "2px solid rgba(255,255,255,0.15)",
-                    color: "white", cursor: "pointer", transition: "all 0.15s",
-                  }}>/{s}/</button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <button onClick={startGame} style={{
-            fontFamily: "Bangers, cursive", fontSize: 26, letterSpacing: 2,
-            padding: "16px 48px", borderRadius: 20, border: "none", cursor: "pointer",
-            background: "linear-gradient(135deg, #2563EB, #7C3AED)",
-            color: "white", boxShadow: "0 8px 32px rgba(37,99,235,0.4)",
-            transition: "transform 0.15s",
-          }}
-            onMouseEnter={e => (e.currentTarget.style.transform = "scale(1.05)")}
-            onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
-          >
-            ⚡ START MISSION!
-          </button>
-
-          <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 12, marginTop: 16 }}>
-            Tip: Press G = Got it! &nbsp;|&nbsp; N = Not yet
-          </p>
+      <div className="sh-page"><style>{CSS}</style><div className="sh-wrap">
+        <button className="sh-chip" onClick={goBack}>Back</button>
+        <div style={{ textAlign: "center", margin: "8px 0" }}>
+          <h1 style={{ margin: "4px 0" }}>Superhero</h1>
+          <p style={{ margin: 0, fontWeight: 700, color: "#e8eaf6" }}>Grumpy villains are causing trouble. Use your words and super powers to cheer them up!</p>
         </div>
-      </div>
+        <div className="sh-card" style={{ display: "flex", gap: 14, alignItems: "center", justifyContent: "center", flexWrap: "wrap" }}>
+          <Hero cape={cape} emblem={emblem} size={170} />
+          <div style={{ textAlign: "left" }}>
+            <div style={{ fontWeight: 900, margin: "4px 0" }}>Pick your cape</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {CAPES.map((c) => (
+                <button key={c.name} className="sh-pick" style={{ background: c.color, borderColor: cape === c.color ? "#1a237e" : "transparent" }}
+                  onClick={() => { setCape(c.color); sfx("tap"); }}>{c.name}</button>
+              ))}
+            </div>
+            <div style={{ fontWeight: 900, margin: "10px 0 4px" }}>Pick your symbol</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {(["star", "bolt", "heart"] as Emblem[]).map((e) => (
+                <button key={e} onClick={() => { setEmblem(e); sfx("tap"); }}
+                  style={{ background: "#f3f4fb", border: emblem === e ? "3px solid #1a237e" : "3px solid #c5cae9", borderRadius: 14, padding: 6, cursor: "pointer" }}>
+                  <svg viewBox="0 0 40 40" width="40" height="40"><EmblemShape e={e} cx={20} cy={20} r={14} fill={cape} /></svg>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <button className="sh-big sh-go" style={{ marginTop: 14 }} onClick={start}>Save the day</button>
+        <p style={{ textAlign: "center", color: "#e8eaf6", fontSize: 14, fontWeight: 700 }}>Grown-up: after each try, tap Got it or Try again.</p>
+      </div></div>
     );
   }
 
-  // ── VICTORY / COMPLETE SCREEN ────────────────────────────────
-  if (phase === "victory" || phase === "complete") {
-    const won = phase === "victory";
-    const stars = accuracy >= gameLen ? 3 : accuracy >= Math.ceil(gameLen * 0.7) ? 2 : 1;
+  if (phase === "done") {
+    const got = log.filter((x) => x.t === "got").length;
+    const hard = Array.from(new Set(log.filter((x) => x.t === "effort").map((x) => x.word)));
     return (
-      <div style={pageStyle}>
-        <style>{fonts}</style>
-        <div style={{ maxWidth: 500, margin: "0 auto", padding: "40px 20px", textAlign: "center" }}>
-          <div style={{ fontSize: 80, marginBottom: 8, animation: "bounce 0.6s ease infinite alternate" }}>
-            {won ? "🏆" : "🦸"}
+      <div className="sh-page"><style>{CSS}</style><div className="sh-wrap">
+        <div className="sh-card sh-pop">
+          <h1 style={{ margin: "4px 0" }}>You saved the day!</h1>
+          <p style={{ fontWeight: 800, margin: 0 }}>Every villain is now your friend. Here's your new team:</p>
+          <div className="sh-arena" style={{ marginTop: 10 }}>
+            <Hero cape={cape} emblem={emblem} size={130} />
+            {friends.map((f) => <Villain key={f} v={f} friendly effect={null} size={105} />)}
           </div>
-          <h1 style={{ fontFamily: "Bangers, cursive", fontSize: "clamp(32px, 8vw, 52px)", color: won ? "#FCD34D" : "white", letterSpacing: 2, margin: "0 0 8px", textShadow: won ? "0 0 20px rgba(252,211,77,0.6)" : "none" }}>
-            {won ? "VILLAIN DEFEATED!" : "MISSION COMPLETE!"}
-          </h1>
-          <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 16, marginBottom: 24 }}>
-            {won ? `${hero.name} saved the day! ${villain.name} has been stopped!` : `Great practice, hero! Keep training!`}
-          </p>
-
-          <div style={{ marginBottom: 20 }}>
-            <Stars count={stars} />
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 28 }}>
-            {[
-              { label: "Correct", value: `${accuracy}/${gameLen}`, icon: "✅" },
-              { label: "Score",   value: score,                        icon: "⭐" },
-              { label: "Best Streak", value: `${bestStreak}x`,        icon: "🔥" },
-            ].map(s => (
-              <div key={s.label} style={{ background: "rgba(255,255,255,0.08)", borderRadius: 16, padding: "14px 8px" }}>
-                <div style={{ fontSize: 22 }}>{s.icon}</div>
-                <div style={{ fontFamily: "Bangers, cursive", fontSize: 28, color: "white", letterSpacing: 1 }}>{s.value}</div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", fontWeight: 700 }}>{s.label}</div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 16, padding: 16, marginBottom: 24, textAlign: "left" }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Word review</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {cards.map((c, i) => (
-                <span key={i} style={{
-                  padding: "5px 14px", borderRadius: 20, fontSize: 14, fontWeight: 800,
-                  background: c.correct ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)",
-                  color: c.correct ? "#34D399" : "#F87171",
-                  border: `1.5px solid ${c.correct ? "#10B981" : "#EF4444"}`,
-                }}>
-                  {c.correct ? "✅" : "❌"} {c.word}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-            <button onClick={startGame} style={{
-              fontFamily: "Bangers, cursive", fontSize: 20, letterSpacing: 1,
-              padding: "12px 28px", borderRadius: 16, border: "none", cursor: "pointer",
-              background: "linear-gradient(135deg, #2563EB, #7C3AED)", color: "white",
-            }}>🔄 Play Again</button>
-            <button onClick={() => setPhase("intro")} style={{
-              fontFamily: "Bangers, cursive", fontSize: 20, letterSpacing: 1,
-              padding: "12px 28px", borderRadius: 16, border: "2px solid rgba(255,255,255,0.2)",
-              background: "transparent", color: "white", cursor: "pointer",
-            }}>⚙️ New Setup</button>
+          <p style={{ fontWeight: 800, fontSize: 18, margin: "10px 0 6px" }}>You practiced {log.length} times. {got} sounded right.</p>
+          {hard.length > 0 && <p style={{ background: "#fff4e0", borderRadius: 12, padding: 10, margin: "8px 0" }}><b>Keep practicing:</b> {hard.join(", ")}</p>}
+          <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+            <button className="sh-big sh-go" onClick={start}>Play again</button>
+            <button className="sh-big" style={{ background: "#e8eaf6", color: "#1a237e" }} onClick={goBack}>Back to homework</button>
           </div>
         </div>
-        <style>{`@keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-12px); } }`}</style>
-      </div>
+      </div></div>
     );
   }
 
-  // ── PLAYING SCREEN ───────────────────────────────────────────
-  return (
-    <div style={pageStyle}>
-      <style>{fonts + animations}</style>
+  const meter = (
+    <div className="sh-meter" aria-label="cheer-up meter">
+      {Array.from({ length: perVillain }, (_, i) => <span key={i} className={i < wIdx + (phase === "friend" ? 1 : 0) || (phase === "power" && effect && i === wIdx) ? "on" : ""} />)}
+    </div>
+  );
 
-      <div style={{ maxWidth: 680, margin: "0 auto", padding: "20px 16px" }}>
-
-        {/* TOP BAR */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <button onClick={() => setPhase("intro")} style={{ background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 10, padding: "6px 12px", color: "rgba(255,255,255,0.6)", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-            ← Exit
-          </button>
-          <div style={{ fontFamily: "Bangers, cursive", fontSize: 16, letterSpacing: 1, color: "rgba(255,255,255,0.6)" }}>
-            Target: <span style={{ color: "#60A5FA", fontSize: 20 }}>/{targetSound}/</span>
-          </div>
-          <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: 10, padding: "6px 14px" }}>
-            <span style={{ fontFamily: "Bangers, cursive", fontSize: 20, color: "#FCD34D", letterSpacing: 1 }}>⭐ {score}</span>
-          </div>
-        </div>
-
-        {/* PROGRESS */}
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", fontWeight: 700 }}>Progress</span>
-            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", fontWeight: 700 }}>{currentIndex}/{gameLen}</span>
-          </div>
-          <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: 20, height: 8 }}>
-            <div style={{ width: `${progressPct}%`, height: "100%", background: "linear-gradient(90deg, #2563EB, #7C3AED)", borderRadius: 20, transition: "width 0.4s ease" }} />
-          </div>
-        </div>
-
-        {/* BATTLE ARENA */}
-        <div style={{
-          background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: 24, padding: "20px 16px", marginBottom: 16,
-          display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 12,
-        }}>
-          {/* HERO side */}
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Your Hero</div>
-            <div style={{ fontSize: 52, marginBottom: 6, animation: phase === "correct" ? "heroAttack 0.5s ease" : "heroIdle 3s ease infinite" }}>
-              {hero.emoji}
-            </div>
-            <div style={{ fontFamily: "Bangers, cursive", fontSize: 14, color: "white", letterSpacing: 1, marginBottom: 8 }}>{hero.name}</div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginBottom: 6, fontWeight: 700 }}>POWER</div>
-            <PowerBar power={power} max={gameLen} />
-            {streak >= 3 && (
-              <div style={{ marginTop: 6, fontSize: 11, fontWeight: 800, color: "#FCD34D" }}>🔥 {streak}x STREAK!</div>
-            )}
-          </div>
-
-          {/* VS */}
-          <div style={{ fontFamily: "Bangers, cursive", fontSize: 28, color: "rgba(255,255,255,0.3)", letterSpacing: 2, textAlign: "center" }}>
-            VS
-          </div>
-
-          {/* VILLAIN side */}
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Villain</div>
-            <div style={{
-              fontSize: 52, marginBottom: 6,
-              animation: phase === "wrong" ? "villainLaugh 0.4s ease" : shake ? "shakeAnim 0.4s ease" : "villainIdle 2s ease infinite",
-              filter: villainHp <= 2 ? "grayscale(0.5)" : "none",
-            }}>
-              {villain.emoji}
-            </div>
-            <div style={{ fontFamily: "Bangers, cursive", fontSize: 14, color: villain.color, letterSpacing: 1, marginBottom: 8 }}>{villain.name}</div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginBottom: 6, fontWeight: 700 }}>HP</div>
-            <PowerBar power={villainHp} max={gameLen} />
-            <div style={{ marginTop: 6, display: "flex", justifyContent: "center", gap: 4 }}>
-              {Array.from({ length: gameLen }).map((_, i) => (
-                <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: i < villainHp ? villain.color : "rgba(255,255,255,0.1)", transition: "background 0.3s" }} />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* WORD CARD */}
-        <div style={{
-          background: phase === "correct"
-            ? "linear-gradient(135deg, #065F46, #10B981)"
-            : phase === "wrong"
-            ? "linear-gradient(135deg, #7F1D1D, #EF4444)"
-            : "linear-gradient(135deg, #1E3A8A, #2563EB)",
-          borderRadius: 28, padding: "32px 24px", textAlign: "center",
-          marginBottom: 16, position: "relative", overflow: "hidden",
-          boxShadow: phase === "correct" ? "0 8px 32px rgba(16,185,129,0.4)" : phase === "wrong" ? "0 8px 32px rgba(239,68,68,0.3)" : "0 8px 32px rgba(37,99,235,0.3)",
-          transition: "all 0.3s ease",
-          minHeight: 160, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        }}>
-          {showBurst && (
-            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-              <div style={{ fontSize: 60, animation: "burst 0.6s ease forwards" }}>⚡</div>
-            </div>
-          )}
-
-          <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>
-            {phase === "correct" ? "⚡ POWER UP!" : phase === "wrong" ? "⚠️ Try again next time!" : `Say this word with /${targetSound}/`}
-          </div>
-
-          {currentCard && (
-            <div style={{ animation: phase === "playing" ? "cardIn 0.3s ease" : undefined }}>
-              <div style={{ marginBottom: 8, display: "flex", justifyContent: "center" }}>
-                <WordImage word={currentCard.word} size={120} />
-              </div>
-              <div style={{
-                fontFamily: "Bangers, cursive",
-                fontSize: "clamp(48px, 12vw, 72px)",
-                color: "white",
-                letterSpacing: 3,
-                lineHeight: 1,
-                textShadow: "0 4px 16px rgba(0,0,0,0.3)",
-              }}>
-                {currentCard.word}
-              </div>
-              {phase === "playing" && (
-                <button onClick={() => speak(currentCard.word)} style={{ marginTop: 10, background: "rgba(255,255,255,0.12)", border: "2px solid rgba(255,255,255,0.3)", color: "#fff", borderRadius: 12, padding: "8px 16px", fontWeight: 800, cursor: "pointer", fontSize: 14 }}>🔊 Hear it</button>
-              )}
-              {phase === "playing" && (
-                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", fontStyle: "italic", marginTop: 10 }}>
-                  💡 Listen — did you hear the /{targetSound}/ sound clearly?
-                </div>
-              )}
-            </div>
-          )}
-
-          {phase === "correct" && <div style={{ fontSize: 28, marginTop: 8, animation: "burst 0.5s ease" }}>🎯✨⚡</div>}
-          {phase === "wrong"   && <div style={{ fontSize: 28, marginTop: 8 }}>⚠️</div>}
-        </div>
-
-        {/* RECORD & PLAYBACK */}
-        {phase === "playing" && currentCard && (
-          <div style={{ textAlign: "center", marginBottom: 16 }}>
-            <p style={{ fontSize: 13, color: "rgba(255,255,255,0.5)", marginBottom: 12, fontWeight: 600 }}>
-              🎙️ Record the word together, then play it back before scoring
-            </p>
-            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 20 }}>
-              <div style={{ position: "relative", display: "inline-flex" }}>
-                {isRecording && (
-                  <span style={{
-                    position: "absolute", inset: 0, borderRadius: "50%",
-                    background: "rgba(239,68,68,0.45)",
-                    animation: "pulseRing 1.2s ease-out infinite",
-                  }} />
-                )}
-                <button
-                  onMouseDown={startRecording}
-                  onMouseUp={stopRecording}
-                  onMouseLeave={() => { if (isRecording) stopRecording(); }}
-                  onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
-                  onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
-                  style={{
-                    position: "relative", width: 84, height: 84, borderRadius: "50%", border: "none",
-                    background: "linear-gradient(135deg, #B91C1C, #EF4444)",
-                    color: "white", fontSize: 32, cursor: "pointer",
-                    boxShadow: "0 6px 20px rgba(239,68,68,0.4)",
-                    transform: isRecording ? "scale(1.08)" : "scale(1)",
-                    transition: "transform 0.15s",
-                  }}
-                >
-                  🎤
-                </button>
-              </div>
-
-              {recordingUrl && !isRecording && (
-                <button
-                  onClick={() => { new Audio(recordingUrl).play(); }}
-                  style={{
-                    width: 84, height: 84, borderRadius: "50%", border: "none",
-                    background: "linear-gradient(135deg, #059669, #10B981)",
-                    color: "white", fontSize: 32, cursor: "pointer",
-                    boxShadow: "0 6px 20px rgba(16,185,129,0.4)",
-                  }}
-                >
-                  🔊
-                </button>
-              )}
-            </div>
-
-            {isRecording && (
-              <div style={{ display: "flex", justifyContent: "center", alignItems: "flex-end", gap: 4, height: 28, marginTop: 14 }}>
-                {[0, 1, 2, 3, 4].map(i => (
-                  <div key={i} style={{
-                    width: 5, background: "#EF4444", borderRadius: 3,
-                    animation: "waveBar 0.8s ease-in-out infinite",
-                    animationDelay: `${i * 0.12}s`,
-                  }} />
-                ))}
-              </div>
-            )}
-
-            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 12, fontWeight: 600 }}>
-              {isRecording
-                ? "🔴 Recording… let go to stop"
-                : recordingUrl
-                ? "Tap 🔊 to listen back together"
-                : "Press and hold 🎤 to record"}
-            </p>
-
-            {micError && (
-              <div style={{
-                marginTop: 12, padding: "10px 16px", borderRadius: 14, display: "inline-block",
-                background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.4)",
-                color: "#FCA5A5", fontSize: 13, fontWeight: 600, maxWidth: 380,
-              }}>
-                🎙️ {micError}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* WORD DOTS */}
-        <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 16 }}>
-          {cards.map((c, i) => (
-            <div key={i} style={{
-              width: i === currentIndex ? 24 : 10, height: 10, borderRadius: 5,
-              background: c.correct === true ? "#10B981" : c.correct === false ? "#EF4444" : i === currentIndex ? "#60A5FA" : "rgba(255,255,255,0.15)",
-              transition: "all 0.3s",
-            }} />
-          ))}
-        </div>
-
-        {/* BUTTONS */}
-        {phase === "playing" && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <button onClick={markCorrect} style={{
-              fontFamily: "Bangers, cursive", fontSize: 22, letterSpacing: 1,
-              padding: "18px 12px", borderRadius: 20, border: "none", cursor: "pointer",
-              background: "linear-gradient(135deg, #059669, #10B981)",
-              color: "white", boxShadow: "0 6px 20px rgba(16,185,129,0.4)",
-              transition: "transform 0.1s",
-            }}
-              onMouseEnter={e => (e.currentTarget.style.transform = "scale(1.03)")}
-              onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
-            >
-              ✅ Got it! <span style={{ fontSize: 13, opacity: 0.7 }}>(G)</span>
-            </button>
-            <button onClick={markWrong} style={{
-              fontFamily: "Bangers, cursive", fontSize: 22, letterSpacing: 1,
-              padding: "18px 12px", borderRadius: 20, border: "none", cursor: "pointer",
-              background: "linear-gradient(135deg, #B91C1C, #EF4444)",
-              color: "white", boxShadow: "0 6px 20px rgba(239,68,68,0.3)",
-              transition: "transform 0.1s",
-            }}
-              onMouseEnter={e => (e.currentTarget.style.transform = "scale(1.03)")}
-              onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
-            >
-              ❌ Not yet <span style={{ fontSize: 13, opacity: 0.7 }}>(N)</span>
-            </button>
-          </div>
-        )}
-
-        <p style={{ textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.3)", marginTop: 14, fontWeight: 600 }}>
-          SLP controls scoring · Kid says the word · You decide ✅ or ❌
-        </p>
+  const arena = (
+    <div className="sh-arena">
+      <Hero cape={cape} emblem={emblem} size={130} pose={phase === "power" ? "zap" : "stand"} />
+      <div ref={targetRef} className={`sh-target ${hot ? "hot" : ""}`}>
+        <Villain v={villain} friendly={phase === "friend"} effect={effect} size={120} />
       </div>
     </div>
   );
+
+  return (
+    <div className="sh-page"><style>{CSS}</style><div className="sh-wrap">
+      <div className="sh-row">
+        <button className="sh-chip" onClick={goBack}>Back</button>
+        {sound && <div style={{ fontWeight: 900 }}>Sound: <span style={{ color: "#ffd54f" }}>/{sound}/</span></div>}
+        <div style={{ fontWeight: 900 }}>Villain {vIdx + 1} of 3</div>
+      </div>
+      <div className="sh-card">
+        <div style={{ fontWeight: 900, fontSize: 18 }}>{VILLAINS[villain].name} {phase === "friend" ? "is happy now!" : VILLAINS[villain].trouble}</div>
+        <div style={{ fontSize: 13, fontWeight: 800, color: "#5c6bc0" }}>Cheer-up meter</div>
+        {meter}
+        {arena}
+        {phase === "say" && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 14, fontWeight: 900, color: "#3949ab", textTransform: "uppercase", letterSpacing: 1 }}>Say it 2 times to power up!</div>
+            <div style={{ marginTop: 6 }}><WordPic key={curWord} word={curWord} size={130} /></div>
+            <div className="sh-word">{curWord}</div>
+            <div className="sh-power">
+              {Array.from({ length: SAYS_PER_WORD }, (_, i) => <span key={i} className={`sh-cell ${power[i] || ""}`} />)}
+            </div>
+            <div style={{ color: "#c26a00", fontWeight: 800, minHeight: 22 }}>{secondTry ? "One more try!" : ""}</div>
+            <button className="sh-chip" style={{ background: "#e8eaf6", color: "#1a237e", marginBottom: 10 }} onClick={() => speak(curWord)}>Hear it</button>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <button className="sh-big sh-got" onClick={gotIt}>Got it</button>
+              <button className="sh-big sh-try" onClick={tryAgain}>Try again</button>
+            </div>
+          </div>
+        )}
+        {phase === "power" && (
+          <div style={{ marginTop: 10 }}>
+            {effect ? (
+              <h2 className="sh-pop" style={{ margin: "6px 0" }}>{POWERS[effect].react}</h2>
+            ) : (
+              <>
+                <h2 style={{ margin: "0 0 2px" }}>Your turn! Pick a super power</h2>
+                <div style={{ fontWeight: 700, color: "#5c6bc0" }}>Drag it to {VILLAINS[villain].name}, or tap it.</div>
+                <div className="sh-opts">
+                  {choices.map((p) => (
+                    <Draggable key={p} onTap={() => firePower(p)} onDrop={(x, y) => { if (inTarget(x, y)) firePower(p); else setHot(false); }}>
+                      <div className="sh-opt"><PowerIcon p={p} />{POWERS[p].label}</div>
+                    </Draggable>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+        {phase === "friend" && (
+          <div className="sh-pop" style={{ marginTop: 10 }}>
+            <h2 style={{ margin: "4px 0" }}>"{VILLAINS[villain].friendly}"</h2>
+            <p style={{ fontWeight: 800 }}>{VILLAINS[villain].name} joined your team!</p>
+            <button className="sh-big sh-go" onClick={nextVillain}>{vIdx + 1 < VILLAIN_ORDER.length ? "Next adventure" : "See your team"}</button>
+          </div>
+        )}
+      </div>
+    </div></div>
+  );
 }
-
-// ── styles ───────────────────────────────────────────────────────
-const pageStyle: React.CSSProperties = {
-  minHeight: "100vh",
-  background: "linear-gradient(160deg, #0F172A 0%, #1E1B4B 50%, #0F172A 100%)",
-  fontFamily: "'Nunito', sans-serif",
-  color: "white",
-};
-
-const fonts = `
-  @import url('https://fonts.googleapis.com/css2?family=Bangers&family=Nunito:wght@400;600;700;800;900&display=swap');
-`;
-
-const animations = `
-  @keyframes heroIdle { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-  @keyframes heroAttack { 0% { transform: translateX(0); } 30% { transform: translateX(40px) scale(1.2); } 100% { transform: translateX(0) scale(1); } }
-  @keyframes villainIdle { 0%,100% { transform: rotate(0deg); } 25% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
-  @keyframes villainLaugh { 0%,100% { transform: scale(1); } 50% { transform: scale(1.15); } }
-  @keyframes shakeAnim { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
-  @keyframes burst { 0% { transform: scale(0.5); opacity: 1; } 100% { transform: scale(2); opacity: 0; } }
-  @keyframes cardIn { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-  @keyframes pulseRing { 0% { transform: scale(0.9); opacity: 0.7; } 70% { transform: scale(1.6); opacity: 0; } 100% { transform: scale(1.6); opacity: 0; } }
-  @keyframes waveBar { 0%,100% { height: 8px; } 50% { height: 26px; } }
-`;
