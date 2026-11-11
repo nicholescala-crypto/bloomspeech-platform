@@ -1,344 +1,454 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
-import { WORD_EMOJIS, DEFAULT_WORD_EMOJI } from "../games/data/wordEmojis";
+import { useEffect, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { speak, sfx, unlockAudio } from "../games/audio";
 
-type Phase = "intro" | "playing" | "levelDone" | "won";
+// ---------------------------------------------------------------------------
+// Word Tower: SAY IT TWICE (grown-up taps Got it / Try again; every try
+// counts), then the child CHOOSES one of three blocks and DRAGS it onto the
+// tower, left, middle or right. Where it goes matters: a lopsided tower
+// wobbles (it never falls). At the end the child picks a topper (flag, star
+// or roof) and each one brings a different surprise.
+// ---------------------------------------------------------------------------
 
-const SECTION_SIZE = 4;       // blocks per tier
-const TARGET_BLOCKS = 24;     // minimum total floors for a nice tall tower
-const BLOCK_H = 50;
+type Phase = "intro" | "say" | "build" | "top" | "done";
+type Try = "got" | "effort";
+type Shape = "square" | "wide" | "tall" | "window" | "arch";
+type Block = { shape: Shape; color: string; x: number };
+type Topper = "flag" | "star" | "roof";
 
-const MATERIALS = [
-  { name: "Stone", block: "#9aa3ad", edge: "#6b727b" },
-  { name: "Brick", block: "#c65f43", edge: "#8f3f2b" },
-  { name: "Wood", block: "#c08a4e", edge: "#8a5f30" },
-  { name: "Gold", block: "#e8c04a", edge: "#b48f22" },
-  { name: "Crystal", block: "#6fc6e0", edge: "#3f96b0" },
-  { name: "Cloud", block: "#dfe8ff", edge: "#a9bce0" },
-];
-
-const BUILDERS = [
-  { name: "Builder Bo", emoji: "👷" },
-  { name: "Bricky", emoji: "🧱" },
-  { name: "Ellie", emoji: "🐘" },
-  { name: "Robo", emoji: "🤖" },
-];
-
-const CSS = `
-@keyframes tw-bob {0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-@keyframes tw-drop {0%{transform:translateY(-230px) scaleY(.7);opacity:0}60%{opacity:1}80%{transform:translateY(6px) scaleY(1.15)}100%{transform:translateY(0) scaleY(1);opacity:1}}
-@keyframes tw-swing {0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
-@keyframes tw-pop {0%{transform:scale(1)}50%{transform:scale(1.12)}100%{transform:scale(1)}}
-@keyframes tw-spark {0%{transform:translateY(0) scale(0);opacity:1}100%{transform:translateY(-50px) scale(1.2);opacity:0}}
-@keyframes tw-flag {0%{transform:translateY(14px) scale(.4);opacity:0}100%{transform:translateY(0) scale(1);opacity:1}}
-`;
+const SAYS_PER_WORD = 2;
+const SHAPES: Record<Shape, { w: number; h: number; label: string }> = {
+  square: { w: 64, h: 52, label: "Square" },
+  wide: { w: 116, h: 40, label: "Long" },
+  tall: { w: 48, h: 82, label: "Tall" },
+  window: { w: 80, h: 62, label: "Window" },
+  arch: { w: 104, h: 56, label: "Arch" },
+};
+const COLORS = ["#e57373", "#64b5f6", "#81c784", "#ffd54f", "#ba68c8", "#ffb74d", "#4db6ac"];
+const COLOR_NAMES: Record<string, string> = {
+  "#e57373": "Red", "#64b5f6": "Blue", "#81c784": "Green", "#ffd54f": "Yellow", "#ba68c8": "Purple", "#ffb74d": "Orange", "#4db6ac": "Teal",
+};
+const STAGE_H = 360;
 
 function readParams() {
   const p = new URLSearchParams(window.location.search);
-  const sound = (p.get("sound") || "").replace(/\//g, "").toLowerCase();
-  const wordsParam = (p.get("words") || "").split(",").map((w) => w.trim()).filter(Boolean);
-  return { sound, wordsParam };
+  const sound = (p.get("sound") || p.get("targetSound") || "").replace(/\//g, "").toLowerCase();
+  const words = (p.get("words") || "").split(",").map((w) => w.trim()).filter(Boolean);
+  return { sound, words };
 }
 
 function shuffle<T>(a: T[]): T[] {
-  return [...a].sort(() => Math.random() - 0.5);
+  const b = a.slice();
+  for (let i = b.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [b[i], b[j]] = [b[j], b[i]];
+  }
+  return b;
 }
 
-function buildSections(words: string[]): string[][] {
-  let padded = shuffle(words);
-  while (padded.length < TARGET_BLOCKS && words.length) padded = padded.concat(shuffle(words));
-  const out: string[][] = [];
-  for (let i = 0; i < padded.length; i += SECTION_SIZE) out.push(padded.slice(i, i + SECTION_SIZE));
-  return out;
+function buildQueue(words: string[]): string[] {
+  const total = Math.max(10, Math.min(16, words.length * 2));
+  const q: string[] = [];
+  while (q.length < total) {
+    let round = shuffle(words);
+    if (q.length && round[0] === q[q.length - 1] && round.length > 1) round = [...round.slice(1), round[0]];
+    q.push(...round);
+  }
+  return q.slice(0, total);
 }
 
-function WordImage({ word, size }: { word: string; size: number }) {
-  const [err, setErr] = useState(false);
-  useEffect(() => setErr(false), [word]);
-  if (err) return <span style={{ fontSize: size * 0.82, lineHeight: 1 }}>{WORD_EMOJIS[word.toLowerCase()] || DEFAULT_WORD_EMOJI}</span>;
-  return <img src={`/Images/${word}.png`} alt={word} onError={() => setErr(true)} style={{ width: size, height: size, objectFit: "contain", borderRadius: 8, background: "rgba(255,255,255,0.95)" }} />;
+function makeChoices(): Block[] {
+  const shapes = shuffle(Object.keys(SHAPES) as Shape[]).slice(0, 3);
+  const colors = shuffle(COLORS).slice(0, 3);
+  return shapes.map((shape, i) => ({ shape, color: colors[i], x: 0 }));
 }
 
-function Block({ word, mat, size = 36 }: { word: string; mat: typeof MATERIALS[number]; size?: number }) {
+function goBack() {
+  if (document.referrer && new URL(document.referrer).origin === window.location.origin) window.history.back();
+  else window.location.href = "/";
+}
+
+// How far the tower's weight sits from the middle (0 = perfectly balanced).
+function lean(blocks: Block[]) {
+  if (!blocks.length) return 0;
+  let m = 0, sum = 0;
+  for (const b of blocks) { const a = SHAPES[b.shape].w * SHAPES[b.shape].h; m += a * b.x; sum += a; }
+  return m / sum;
+}
+
+// ── Drawings ───────────────────────────────────────────────────────
+function BlockView({ b, scale = 1 }: { b: Block; scale?: number }) {
+  const { w, h } = SHAPES[b.shape];
+  const W = w * scale, H = h * scale;
   return (
-    <div style={{ width: 168, height: BLOCK_H - 4, borderRadius: 10, background: mat.block, border: `3px solid ${mat.edge}`, boxShadow: "0 3px 0 rgba(0,0,0,0.15)", display: "flex", alignItems: "center", gap: 8, padding: "0 10px" }}>
-      <WordImage word={word} size={size} />
-      <span style={{ fontWeight: 900, fontSize: 17, color: "#2b2b2b", textTransform: "lowercase", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{word}</span>
+    <svg width={W} height={H} viewBox={`0 0 ${w} ${h}`} style={{ display: "block" }}>
+      {b.shape === "arch" ? (
+        <path d={`M0 0 H${w} V${h} H${w - 26} Q${w / 2} ${h * 0.15} 26 ${h} H0 Z`} fill={b.color} stroke="rgba(0,0,0,.25)" strokeWidth="2" />
+      ) : (
+        <rect x="1" y="1" width={w - 2} height={h - 2} rx="5" fill={b.color} stroke="rgba(0,0,0,.25)" strokeWidth="2" />
+      )}
+      {b.shape === "window" && <rect x={w / 2 - 14} y={h / 2 - 14} width="28" height="28" rx="4" fill="#e3f2fd" stroke="rgba(0,0,0,.3)" strokeWidth="2" />}
+      {b.shape === "window" && <path d={`M${w / 2} ${h / 2 - 14} V${h / 2 + 14} M${w / 2 - 14} ${h / 2} H${w / 2 + 14}`} stroke="rgba(0,0,0,.3)" strokeWidth="2" />}
+      {b.shape === "wide" && <path d={`M${w / 3} 4 V${h - 4} M${(2 * w) / 3} 4 V${h - 4}`} stroke="rgba(0,0,0,.12)" strokeWidth="2" />}
+      <rect x="4" y="4" width={w - 8} height="5" rx="2" fill="rgba(255,255,255,.35)" />
+    </svg>
+  );
+}
+
+function TopperView({ t, size = 70 }: { t: Topper; size?: number }) {
+  if (t === "flag")
+    return (
+      <svg viewBox="0 0 60 70" width={size} height={size * 1.16}>
+        <rect x="8" y="4" width="4" height="66" fill="#6d4c41" />
+        <path d="M12 6 L54 16 L12 28 Z" fill="#e53935" />
+      </svg>
+    );
+  if (t === "star")
+    return (
+      <svg viewBox="0 0 60 60" width={size} height={size}>
+        <polygon points="30,3 37,22 57,22 41,34 47,54 30,42 13,54 19,34 3,22 23,22" fill="#ffd54f" stroke="#f9a825" strokeWidth="2" />
+      </svg>
+    );
+  return (
+    <svg viewBox="0 0 80 50" width={size * 1.3} height={size * 0.8}>
+      <polygon points="40,2 78,48 2,48" fill="#8d6e63" stroke="#5d4037" strokeWidth="2" />
+    </svg>
+  );
+}
+
+const Bird = () => (
+  <svg viewBox="0 0 60 44" width="64" height="47">
+    <ellipse cx="28" cy="26" rx="20" ry="14" fill="#42a5f5" />
+    <circle cx="44" cy="16" r="10" fill="#42a5f5" />
+    <circle cx="47" cy="14" r="2.5" fill="#222" />
+    <polygon points="54,16 62,18 54,21" fill="#ffa000" />
+    <path d="M14 22 Q24 4 34 22" fill="#1e88e5" />
+  </svg>
+);
+
+const Rainbow = () => (
+  <svg viewBox="0 0 300 150" width="100%" height="150" style={{ position: "absolute", left: 0, top: 10, pointerEvents: "none" }}>
+    {["#e53935", "#fb8c00", "#fdd835", "#43a047", "#1e88e5", "#8e24aa"].map((c, i) => (
+      <path key={c} d={`M${20 + i * 10} 150 A${130 - i * 10} ${130 - i * 10} 0 0 1 ${280 - i * 10} 150`} stroke={c} strokeWidth="10" fill="none" opacity=".75" />
+    ))}
+  </svg>
+);
+
+function WordPic({ word, size }: { word: string; size: number }) {
+  const [missing, setMissing] = useState(false);
+  if (missing)
+    return (
+      <div style={{ width: size, height: size, borderRadius: 16, background: "#fff4e0", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: size / 5, margin: "0 auto", color: "#22364a" }}>
+        {word}
+      </div>
+    );
+  return <img src={`/Images/${word.toLowerCase()}.png`} alt={word} onError={() => setMissing(true)} draggable={false}
+    style={{ width: size, height: size, objectFit: "contain", borderRadius: 16, background: "#fff", display: "block", margin: "0 auto" }} />;
+}
+
+function Draggable({ children, onDrop, onTap }: { children: ReactNode; onDrop: (x: number, y: number) => void; onTap: () => void }) {
+  const [off, setOff] = useState({ x: 0, y: 0 });
+  const [drag, setDrag] = useState<{ sx: number; sy: number } | null>(null);
+  function down(e: ReactPointerEvent<HTMLDivElement>) {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDrag({ sx: e.clientX, sy: e.clientY });
+  }
+  function move(e: ReactPointerEvent<HTMLDivElement>) {
+    if (drag) setOff({ x: e.clientX - drag.sx, y: e.clientY - drag.sy });
+  }
+  function up(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!drag) return;
+    const moved = Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 10;
+    setDrag(null);
+    setOff({ x: 0, y: 0 });
+    if (moved) onDrop(e.clientX, e.clientY);
+    else onTap();
+  }
+  return (
+    <div onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { setDrag(null); setOff({ x: 0, y: 0 }); }}
+      style={{ transform: `translate(${off.x}px, ${off.y}px)`, transition: drag ? "none" : "transform .25s", cursor: drag ? "grabbing" : "grab", touchAction: "none", userSelect: "none", position: "relative", zIndex: drag ? 20 : 1 }}>
+      {children}
     </div>
   );
 }
 
+const CSS = `
+.wt-page{min-height:100vh;font-family:'Nunito',system-ui,Arial,sans-serif;background:linear-gradient(#e3f2fd,#f1f8e9);color:#22364a;padding:14px 14px 30px;box-sizing:border-box}
+.wt-wrap{max-width:720px;margin:0 auto}
+.wt-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.wt-chip{background:#fff;border:2px solid #d6e6f2;color:#2b6f86;font-weight:800;border-radius:12px;padding:8px 14px;cursor:pointer;font-family:inherit;font-size:15px}
+.wt-card{background:#fff;border-radius:22px;padding:14px;text-align:center;box-shadow:0 8px 24px rgba(43,111,134,.12)}
+.wt-main{display:flex;gap:14px;align-items:stretch}
+.wt-left{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center}
+.wt-stage{width:260px;flex:none;height:${STAGE_H}px;position:relative;border-radius:18px;overflow:hidden;background:linear-gradient(#bbdefb,#e3f2fd 75%,#a5d6a7 75%)}
+.wt-stage.night{background:linear-gradient(#1a237e,#283593 75%,#33691e 75%)}
+.wt-stage.hot{outline:4px dashed #2b6f86;outline-offset:-4px}
+.wt-big{border:none;border-radius:16px;padding:16px 12px;font-size:19px;font-weight:900;cursor:pointer;font-family:inherit;touch-action:manipulation}
+.wt-big:active{transform:scale(.97)}
+.wt-go{background:linear-gradient(135deg,#3f96b0,#2b6f86);color:#fff;width:100%}
+.wt-got{background:#27c06b;color:#fff;box-shadow:0 4px 0 #1b8a4c}
+.wt-try{background:#f5a623;color:#22364a;box-shadow:0 4px 0 #b97a12}
+.wt-word{font-size:34px;font-weight:900;margin:6px 0 0}
+.wt-power{display:flex;justify-content:center;gap:10px;margin:8px 0}
+.wt-cell{width:36px;height:36px;border-radius:50%;border:3px solid #cfd8dc;background:#f4f7f9}
+.wt-cell.got{background:#27c06b;border-color:#1b8a4c}.wt-cell.effort{background:#f5a623;border-color:#b97a12}
+.wt-opts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.wt-opt{background:#f4f9ff;border:3px solid #d6e6f2;border-radius:16px;padding:8px 4px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;min-height:120px;font-weight:800;font-size:14px}
+.wt-tower{position:absolute;left:50%;bottom:${STAGE_H * 0.25 - 6}px;transform-origin:50% 100%}
+.wt-wobble{animation:wtWobble .9s ease-in-out 2}
+@keyframes wtWobble{0%,100%{rotate:0deg}25%{rotate:-4deg}75%{rotate:4deg}}
+.wt-drop{animation:wtDrop .4s ease-out}
+@keyframes wtDrop{from{transform:translate(-50%,-60px);opacity:.3}to{transform:translate(-50%,0);opacity:1}}
+.wt-bird{position:absolute;animation:wtBird 2.4s ease-out forwards}
+@keyframes wtBird{from{left:-70px;top:20px}to{left:calc(50% + 6px);top:var(--land)}}
+.wt-tw{position:absolute;width:3px;height:3px;border-radius:50%;background:#fff;animation:wtTw 1.4s ease-in-out infinite alternate}
+@keyframes wtTw{from{opacity:.2}to{opacity:1}}
+.wt-glow{filter:drop-shadow(0 0 12px #fff59d)}
+.wt-pop{animation:wtPop .5s ease-out}
+@keyframes wtPop{0%{transform:scale(.5);opacity:0}70%{transform:scale(1.1);opacity:1}100%{transform:scale(1)}}
+@media (max-width:560px){.wt-main{flex-direction:column-reverse}.wt-stage{width:100%;height:300px}}
+`;
+
 export default function TowerGame() {
-  const params = useMemo(readParams, []);
+  const [{ sound, words }] = useState(readParams);
   const [phase, setPhase] = useState<Phase>("intro");
-  const [builder, setBuilder] = useState(0);
-  const [sections, setSections] = useState<string[][]>([]);
-  const [sectionIdx, setSectionIdx] = useState(0);
-  const [blockIdx, setBlockIdx] = useState(0);
-  const [stars, setStars] = useState(0);
-  const [tries, setTries] = useState(0);
-  const [fx, setFx] = useState(false);
+  const [queue, setQueue] = useState<string[]>([]);
+  const [idx, setIdx] = useState(0);
+  const [power, setPower] = useState<Try[]>([]);
+  const [secondTry, setSecondTry] = useState(false);
+  const [log, setLog] = useState<{ word: string; t: Try }[]>([]);
+  const [blocks, setBlocks] = useState<Block[]>([]);
+  const [choices, setChoices] = useState<Block[]>([]);
+  const [wobble, setWobble] = useState(0);
+  const [topper, setTopper] = useState<Topper | null>(null);
+  const [hot, setHot] = useState(false);
+  const [stars] = useState(() => Array.from({ length: 30 }, () => ({ l: Math.random() * 100, t: Math.random() * 70 })));
+  const stageRef = useRef<HTMLDivElement>(null);
 
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
-  const [micError, setMicError] = useState<string | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<BlobPart[]>([]);
+  const curWord = queue[idx] || "";
 
-  const soundLabel = params.sound ? `/${params.sound}/` : "";
-  const section = sections[sectionIdx] || [];
-  const curWord = section[blockIdx] || "";
-  const totalBlocks = sections.reduce((n, s) => n + s.length, 0);
-  const floors = sections.slice(0, sectionIdx).reduce((n, s) => n + s.length, 0) + blockIdx;
-  const mat = MATERIALS[sectionIdx % MATERIALS.length];
-  const cur = BUILDERS[builder];
+  useEffect(() => {
+    if (phase === "say" && curWord && power.length === 0 && !secondTry) speak(curWord);
+  }, [phase, curWord]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function start() {
     unlockAudio();
-    setSections(buildSections(params.wordsParam));
-    setSectionIdx(0); setBlockIdx(0); setStars(0); setTries(0); setFx(false);
-    setRecordingUrl(null);
-    setPhase("playing");
+    sfx("tap");
+    setQueue(buildQueue(words));
+    setIdx(0); setPower([]); setSecondTry(false); setLog([]); setBlocks([]); setTopper(null);
+    setPhase("say");
   }
 
-  function advance(got: boolean) {
-    setTries((t) => t + 1);
-    if (got) setStars((s) => s + 1);
-    setRecordingUrl(null); setFx(false);
-    if (blockIdx + 1 < section.length) setBlockIdx(blockIdx + 1);
-    else if (sectionIdx + 1 < sections.length) setPhase("levelDone");
-    else setPhase("won");
-  }
-
-  function play() {
-    if (fx) return;
-    sfx("success");
-    setFx(true);
-    window.setTimeout(() => advance(true), 1000);
-  }
-
-  useEffect(() => { if (phase === "playing" && curWord) speak(curWord); }, [curWord, phase]);
-  useEffect(() => { if (phase === "won") sfx("win"); else if (phase === "levelDone") sfx("level"); }, [phase]);
-
-  function nextSection() { setSectionIdx(sectionIdx + 1); setBlockIdx(0); setPhase("playing"); }
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (phase !== "playing" || fx) return;
-      if (e.key === "g" || e.key === "G" || e.key === " ") { e.preventDefault(); play(); }
-      else if (e.key === "n" || e.key === "N") advance(false);
+  function addTry(t: Try) {
+    const next = [...power, t];
+    setLog((l) => [...l, { word: curWord, t }]);
+    setPower(next);
+    setSecondTry(false);
+    if (next.length >= SAYS_PER_WORD) {
+      setChoices(makeChoices());
+      window.setTimeout(() => setPhase("build"), 450);
+    } else {
+      window.setTimeout(() => speak(curWord), 350);
     }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
-
-  async function startRec() {
-    setMicError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const r = new MediaRecorder(stream);
-      chunksRef.current = [];
-      r.ondataavailable = (e) => e.data.size > 0 && chunksRef.current.push(e.data);
-      r.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        if (recordingUrl) URL.revokeObjectURL(recordingUrl);
-        setRecordingUrl(URL.createObjectURL(blob));
-        stream.getTracks().forEach((t) => t.stop());
-      };
-      r.start(); recorderRef.current = r; setIsRecording(true);
-    } catch { setMicError("Mic is off — you can still tap to score."); }
   }
-  function stopRec() { const r = recorderRef.current; if (r && r.state !== "inactive") r.stop(); setIsRecording(false); }
-  function playBack() { if (recordingUrl) new Audio(recordingUrl).play().catch(() => {}); }
+  function gotIt() { sfx("success"); addTry("got"); }
+  function tryAgain() {
+    if (!secondTry) { sfx("tap"); setSecondTry(true); speak(curWord); }
+    else { sfx("pop"); addTry("effort"); }
+  }
 
-  const page: CSSProperties = { minHeight: "100vh", fontFamily: "'Nunito',system-ui,Arial,sans-serif", background: "linear-gradient(180deg,#bfe3ff,#e8f5ff 55%,#dff0dc)", color: "#22364a", padding: "16px 16px 40px" };
-  const wrap: CSSProperties = { maxWidth: 720, margin: "0 auto" };
-  const card: CSSProperties = { background: "#fff", border: "2px solid #d6e6f2", borderRadius: 20, padding: 18, marginBottom: 14, boxShadow: "0 8px 24px rgba(60,110,160,0.12)" };
+  // Stage geometry: tower is drawn at a scale that keeps it inside the stage.
+  const towerH = blocks.reduce((h, b) => h + SHAPES[b.shape].h, 0);
+  const scale = Math.min(1, (STAGE_H * 0.66) / Math.max(1, towerH + 110));
+  const topX = blocks.length ? blocks[blocks.length - 1].x : 0;
 
-  // ── NO HOMEWORK ────────────────────────────────────────────────
-  if (!params.wordsParam.length) {
+  function place(choice: Block, clientX?: number) {
+    let x = topX;
+    const r = stageRef.current?.getBoundingClientRect();
+    if (r && clientX !== undefined) {
+      const rel = (clientX - (r.left + r.width / 2)) / scale; // px from the middle, in tower units
+      const below = blocks.length ? SHAPES[blocks[blocks.length - 1].shape].w : 120;
+      const limit = below / 2;
+      x = topX + Math.max(-limit, Math.min(limit, rel - topX));
+      x = Math.round(x / 8) * 8;
+    }
+    const next = [...blocks, { ...choice, x }];
+    setBlocks(next);
+    setPower([]);
+    sfx("pop");
+    if (Math.abs(lean(next)) > 22) { setWobble((w) => w + 1); window.setTimeout(() => sfx("fail"), 200); }
+    window.setTimeout(() => {
+      if (idx + 1 < queue.length) { setIdx(idx + 1); setPhase("say"); }
+      else setPhase("top");
+    }, 700);
+  }
+
+  function dropOnStage(choice: Block, x: number, y: number) {
+    setHot(false);
+    const r = stageRef.current?.getBoundingClientRect();
+    if (r && x > r.left - 30 && x < r.right + 30 && y > r.top && y < r.bottom) place(choice, x);
+  }
+
+  function chooseTopper(t: Topper) {
+    setTopper(t);
+    sfx("win");
+    setPhase("done");
+  }
+
+  if (!words.length) {
     return (
-      <div style={{ ...page, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ ...wrap, textAlign: "center" }}>
-          <div style={{ fontSize: 60 }}>🏗️</div>
-          <h1 style={{ fontSize: 24, margin: "10px 0" }}>No blueprint loaded</h1>
-          <p style={{ maxWidth: 340, margin: "0 auto 18px", opacity: 0.8, lineHeight: 1.5 }}>Open your child’s practice card and tap a game there — it will build the exact words their therapist assigned.</p>
-          <button onClick={() => { window.location.href = "/parent"; }} style={{ padding: "14px 28px", borderRadius: 16, border: "none", background: "linear-gradient(135deg,#3f96b0,#2b6f86)", color: "white", fontSize: 16, fontWeight: 900, cursor: "pointer" }}>
-            ← Back to my child’s card
-          </button>
+      <div className="wt-page" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <style>{CSS}</style>
+        <div className="wt-wrap" style={{ textAlign: "center" }}>
+          <h1>No homework loaded</h1>
+          <p>Open your child's homework and tap Word Tower there.</p>
+          <button className="wt-big wt-go" style={{ maxWidth: 320 }} onClick={goBack}>Back to homework</button>
         </div>
       </div>
     );
   }
 
-  // ── INTRO ──────────────────────────────────────────────────────
+  // Build the tower bottom-up.
+  const bottoms = blocks.map((_, i) => blocks.slice(0, i).reduce((h, bb) => h + SHAPES[bb.shape].h, 0));
+  const y = towerH;
+  const towerBlocks = blocks.map((b, i) => (
+    <div key={i} className={i === blocks.length - 1 && phase !== "done" ? "wt-drop" : ""}
+      style={{ position: "absolute", bottom: bottoms[i] * scale, left: b.x * scale, transform: "translateX(-50%)" }}>
+      <BlockView b={b} scale={scale} />
+    </div>
+  ));
+  const night = phase === "done" && topper === "star";
+  const landTop = STAGE_H * 0.75 - 6 - (towerH + 60) * scale - 40;
+
+  const stage = (
+    <div ref={stageRef} className={`wt-stage ${night ? "night" : ""} ${hot ? "hot" : ""}`}>
+      {night && stars.map((s, i) => <span key={i} className="wt-tw" style={{ left: `${s.l}%`, top: `${s.t}%`, animationDelay: `${(i % 7) * 0.2}s` }} />)}
+      {phase === "done" && topper === "roof" && <Rainbow />}
+      <div key={wobble} className={`wt-tower ${wobble ? "wt-wobble" : ""}`}>
+        {towerBlocks}
+        {phase === "done" && topper && (
+          <div className={`wt-pop ${topper === "star" ? "wt-glow" : ""}`} style={{ position: "absolute", bottom: y * scale - 2, left: topX * scale, transform: "translateX(-50%)" }}>
+            <TopperView t={topper} size={60 * Math.max(scale, 0.6)} />
+          </div>
+        )}
+      </div>
+      {phase === "done" && topper === "flag" && (
+        <div className="wt-bird" style={{ ["--land" as string]: `${Math.max(10, landTop)}px` }}><Bird /></div>
+      )}
+      <div style={{ position: "absolute", top: 8, right: 10, fontWeight: 900, color: night ? "#fff" : "#22364a" }}>{blocks.length} {blocks.length === 1 ? "floor" : "floors"}</div>
+    </div>
+  );
+
+  const top = (
+    <div className="wt-row">
+      <button className="wt-chip" onClick={goBack}>Back</button>
+      {sound && <div style={{ fontWeight: 900 }}>Sound: <span style={{ color: "#2b6f86" }}>/{sound}/</span></div>}
+      <div style={{ fontWeight: 900 }}>{Math.min(idx + 1, queue.length || 1)} of {queue.length || "?"}</div>
+    </div>
+  );
+
   if (phase === "intro") {
     return (
-      <div style={page}>
-        <style>{CSS}</style>
-        <div style={{ ...wrap, textAlign: "center" }}>
-          <a href="/parent" style={{ color: "#2b6f86", fontWeight: 800, textDecoration: "none", fontSize: 14, display: "inline-block", marginBottom: 8 }}>← Back</a>
-          <div style={{ fontSize: 58, animation: "tw-bob 2.6s ease-in-out infinite" }}>🏗️</div>
-          <h1 style={{ fontSize: 30, margin: "6px 0" }}>Word Tower</h1>
-          <p style={{ opacity: 0.8, margin: "0 0 16px" }}>Say each word to stack a block. Build all the way up to the castle! {soundLabel && <>Sound: <b>{soundLabel}</b></>}</p>
-          <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#2b6f86", marginBottom: 8 }}>Pick your builder</div>
-          <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginBottom: 22 }}>
-            {BUILDERS.map((b, i) => (
-              <button key={b.name} onClick={() => setBuilder(i)} style={{ width: 110, padding: "14px 8px", borderRadius: 16, cursor: "pointer", background: builder === i ? "#cdeaf7" : "#fff", border: builder === i ? "2px solid #3f96b0" : "2px solid #d6e6f2", color: "#22364a" }}>
-                <div style={{ fontSize: 38 }}>{b.emoji}</div>
-                <div style={{ fontSize: 13, fontWeight: 800, marginTop: 4 }}>{b.name}</div>
-              </button>
-            ))}
+      <div className="wt-page"><style>{CSS}</style><div className="wt-wrap">
+        <button className="wt-chip" onClick={goBack}>Back</button>
+        <div className="wt-card" style={{ marginTop: 12 }}>
+          <div style={{ display: "flex", justifyContent: "center", gap: 4, alignItems: "flex-end", margin: "6px 0" }}>
+            <BlockView b={{ shape: "tall", color: "#64b5f6", x: 0 }} scale={0.8} />
+            <BlockView b={{ shape: "window", color: "#ffd54f", x: 0 }} scale={0.8} />
+            <BlockView b={{ shape: "square", color: "#e57373", x: 0 }} scale={0.8} />
           </div>
-          <button onClick={start} style={{ padding: "16px 44px", borderRadius: 20, border: "none", cursor: "pointer", background: "linear-gradient(135deg,#3f96b0,#2b6f86)", color: "white", fontSize: 22, fontWeight: 900, boxShadow: "0 10px 30px rgba(43,111,134,0.35)" }}>
-            🧱 Start building!
-          </button>
-          <p style={{ opacity: 0.45, fontSize: 12, marginTop: 14 }}>{params.wordsParam.length} words · ~{Math.max(TARGET_BLOCKS, params.wordsParam.length)} floors · Press G = Got it, N = Not yet</p>
+          <h1 style={{ margin: "6px 0 4px" }}>Word Tower</h1>
+          <p style={{ fontWeight: 700, margin: 0 }}>Say each word 2 times, then pick a block and put it on your tower.</p>
+          <p style={{ fontWeight: 700, margin: "4px 0 12px" }}>Careful: a lopsided tower wobbles! At the end, pick what goes on top.</p>
+          <button className="wt-big wt-go" onClick={start}>Start building</button>
+          <p style={{ fontSize: 14, fontWeight: 700, color: "#567" }}>Grown-up: after each try, tap Got it or Try again.</p>
         </div>
-      </div>
+      </div></div>
     );
   }
 
-  // ── LEVEL DONE (tier finished) ─────────────────────────────────
-  if (phase === "levelDone") {
+  if (phase === "done") {
+    const got = log.filter((x) => x.t === "got").length;
+    const hard = Array.from(new Set(log.filter((x) => x.t === "effort").map((x) => x.word)));
+    const msg = topper === "flag" ? "A bird came to visit your flag!" : topper === "star" ? "Your star lights up the night sky!" : "Your roof brought a rainbow!";
     return (
-      <div style={{ ...page, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <style>{CSS}</style>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 30, animation: "tw-flag .5s ease-out" }}>🚩</div>
-          <div style={{ fontSize: 84 }}>🏢</div>
-          <h2 style={{ margin: "8px 0", color: "#2b6f86" }}>{mat.name} tier done!</h2>
-          <p style={{ opacity: 0.8 }}>Tower is {floors} floors tall. Next up: {MATERIALS[(sectionIdx + 1) % MATERIALS.length].name}.</p>
-          <button onClick={nextSection} style={{ marginTop: 14, padding: "14px 30px", borderRadius: 16, border: "none", background: "linear-gradient(135deg,#3f96b0,#2b6f86)", color: "white", fontSize: 17, fontWeight: 900, cursor: "pointer" }}>Keep building ▲</button>
+      <div className="wt-page"><style>{CSS}</style><div className="wt-wrap">
+        <div className="wt-card">
+          <div className="wt-main">
+            <div className="wt-left">
+              <h1 style={{ margin: "4px 0" }}>{msg}</h1>
+              <p style={{ fontWeight: 800 }}>Your tower is {blocks.length} floors tall.</p>
+              <p style={{ fontWeight: 800, fontSize: 18, margin: "6px 0" }}>You practiced {log.length} times. {got} sounded right.</p>
+              {hard.length > 0 && <p style={{ background: "#fff4e0", borderRadius: 12, padding: 10, margin: "8px 0" }}><b>Keep practicing:</b> {hard.join(", ")}</p>}
+              <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+                <button className="wt-big wt-go" onClick={start}>Build a new tower</button>
+                <button className="wt-big" style={{ background: "#eaf3fa", color: "#2b6f86" }} onClick={goBack}>Back to homework</button>
+              </div>
+            </div>
+            {stage}
+          </div>
         </div>
-      </div>
+      </div></div>
     );
   }
 
-  // ── WON ────────────────────────────────────────────────────────
-  if (phase === "won") {
-    const acc = tries ? Math.round((stars / tries) * 100) : 0;
-    return (
-      <div style={page}>
-        <style>{CSS}</style>
-        <div style={{ ...wrap, textAlign: "center", paddingTop: 30 }}>
-          <div style={{ fontSize: 30 }}>🚩</div>
-          <div style={{ fontSize: 84, animation: "tw-bob 2.4s ease-in-out infinite" }}>🏰</div>
-          <h1 style={{ fontSize: 30, margin: "8px 0" }}>Tower complete!</h1>
-          <p style={{ opacity: 0.8 }}>{cur.name} {cur.emoji} built a castle {totalBlocks} floors high.</p>
-          <div style={{ ...card, display: "inline-block", padding: "16px 28px", marginTop: 8 }}>
-            <div style={{ fontSize: 30, fontWeight: 900 }}>⭐ {stars} / {totalBlocks}</div>
-            <div style={{ opacity: 0.75, marginTop: 4 }}>Accuracy {acc}% · {totalBlocks} floors</div>
-          </div>
-          <div style={{ marginTop: 20, display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-            <button onClick={start} style={{ padding: "14px 28px", borderRadius: 16, border: "none", background: "linear-gradient(135deg,#3f96b0,#2b6f86)", color: "white", fontSize: 16, fontWeight: 900, cursor: "pointer" }}>🧱 Build again</button>
-            <button onClick={() => { window.location.href = "/parent"; }} style={{ padding: "14px 28px", borderRadius: 16, border: "2px solid #9cc6d8", background: "transparent", color: "#22364a", fontSize: 16, fontWeight: 900, cursor: "pointer" }}>Done</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── PLAYING ────────────────────────────────────────────────────
-  const placed = section.slice(0, blockIdx);
-  const stackH = SECTION_SIZE * BLOCK_H + 96;
-  const castlePct = totalBlocks ? Math.round((floors / totalBlocks) * 100) : 0;
   return (
-    <div style={page}>
-      <style>{CSS}</style>
-      <div style={wrap}>
-        {/* top bar */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <button onClick={() => { window.location.href = "/parent"; }} style={{ background: "#fff", border: "2px solid #d6e6f2", borderRadius: 10, padding: "6px 12px", color: "#2b6f86", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>← Exit</button>
-          {soundLabel && <div style={{ fontWeight: 800, color: "#2b6f86" }}>Sound {soundLabel}</div>}
-          <div style={{ background: "#fff", border: "2px solid #d6e6f2", borderRadius: 12, padding: "6px 12px", fontWeight: 900 }}>⭐ {stars}</div>
-        </div>
-
-        {/* tier progress */}
-        <div style={{ ...card, padding: 14 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
-            {sections.map((_, i) => (
-              <span key={i} style={{ fontSize: i === sectionIdx ? 22 : 16, opacity: i > sectionIdx ? 0.4 : 1 }}>{i < sectionIdx ? "🟩" : i === sectionIdx ? "🏗️" : "▫️"}</span>
-            ))}
-          </div>
-          <div style={{ textAlign: "center", marginTop: 6, fontWeight: 900, fontSize: 15, color: mat.edge }}>{mat.name} tier · Floor {floors + 1} of {totalBlocks}</div>
-        </div>
-
-        {/* build scene */}
-        <div style={{ ...card, position: "relative", overflow: "hidden" }}>
-          <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: mat.edge, textAlign: "center" }}>
-            🧱 Stack the block · say <span style={{ color: "#163b3f" }}>{curWord}</span>{soundLabel && <> with {soundLabel}</>}
-          </div>
-
-          <div style={{ display: "flex", gap: 12, alignItems: "flex-end", justifyContent: "center", marginTop: 6 }}>
-            {/* the tower column */}
-            <div style={{ position: "relative", width: 180, height: stackH }}>
-              {/* crane + hanging block */}
-              {!fx && (
-                <div onClick={play} style={{ position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", cursor: "pointer", textAlign: "center" }}>
-                  <div style={{ fontSize: 26 }}>🏗️</div>
-                  <div style={{ width: 2, height: 14, background: "#7c8aa0", margin: "0 auto" }} />
-                  <div style={{ animation: "tw-swing 2.2s ease-in-out infinite" }}><Block word={curWord} mat={mat} /></div>
+    <div className="wt-page"><style>{CSS}</style><div className="wt-wrap">
+      {top}
+      <div className="wt-card">
+        <div className="wt-main">
+          <div className="wt-left">
+            {phase === "say" && (
+              <>
+                <div style={{ fontSize: 14, fontWeight: 900, color: "#2b6f86", textTransform: "uppercase", letterSpacing: 1 }}>Say it 2 times!</div>
+                <div style={{ marginTop: 6 }}><WordPic key={curWord} word={curWord} size={150} /></div>
+                <div className="wt-word">{curWord}</div>
+                <div className="wt-power">
+                  {Array.from({ length: SAYS_PER_WORD }, (_, i) => <span key={i} className={`wt-cell ${power[i] || ""}`} />)}
                 </div>
-              )}
-              {/* dropping block */}
-              {fx && (
-                <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: blockIdx * BLOCK_H + 6, animation: "tw-drop .7s ease-out" }}>
-                  <Block word={curWord} mat={mat} />
+                <div style={{ color: "#c26a00", fontWeight: 800, minHeight: 22 }}>{secondTry ? "One more try!" : ""}</div>
+                <div><button className="wt-chip" style={{ marginBottom: 10 }} onClick={() => speak(curWord)}>Hear it</button></div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <button className="wt-big wt-got" onClick={gotIt}>Got it</button>
+                  <button className="wt-big wt-try" onClick={tryAgain}>Try again</button>
                 </div>
-              )}
-              {/* placed blocks */}
-              {placed.map((w, i) => (
-                <div key={w + i} style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: i * BLOCK_H + 6 }}>
-                  <Block word={w} mat={mat} />
-                </div>
-              ))}
-              {/* sparkles on drop */}
-              {fx && Array.from({ length: 5 }).map((_, i) => (
-                <span key={i} style={{ position: "absolute", left: `${28 + i * 12}%`, bottom: blockIdx * BLOCK_H + 30, fontSize: 16, animation: `tw-spark .8s ease-out ${i * 0.05}s forwards` }}>✨</span>
-              ))}
-              {/* ground */}
-              <div style={{ position: "absolute", bottom: 0, left: -10, right: -10, height: 8, background: "#7fae55", borderRadius: 4 }} />
-            </div>
-
-            {/* castle height meter */}
-            <div style={{ width: 26, height: stackH, position: "relative", background: "#eaf3fa", borderRadius: 13, border: "2px solid #d6e6f2", overflow: "hidden" }}>
-              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: castlePct + "%", background: "linear-gradient(180deg,#7fd4ff,#3f96b0)", transition: "height .4s" }} />
-              <div style={{ position: "absolute", top: 2, left: 0, right: 0, textAlign: "center", fontSize: 16 }}>🏰</div>
-            </div>
-          </div>
-
-          {/* current word big */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginTop: 6 }}>
-            <WordImage word={curWord} size={56} />
-            <div style={{ fontSize: 38, fontWeight: 900, lineHeight: 1, textTransform: "lowercase" }}>{curWord}</div>
-          </div>
-          <div style={{ fontSize: 12, color: "#7c8aa0", fontWeight: 700, marginTop: 4, textAlign: "center" }}>Block {blockIdx + 1} of {section.length} · this tier</div>
-
-          {/* record (optional) */}
-          <div style={{ marginTop: 12, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-            <button onClick={() => speak(curWord)} style={{ background: "#eaf3fa", border: "2px solid #d6e6f2", color: "#2b6f86", borderRadius: 12, padding: "8px 14px", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>🔊 Hear it</button>
-            {!isRecording ? (
-              <button onClick={startRec} style={{ background: "#eaf3fa", border: "2px solid #d6e6f2", color: "#2b6f86", borderRadius: 12, padding: "8px 14px", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>🎤 Record</button>
-            ) : (
-              <button onClick={stopRec} style={{ background: "#ef4444", border: "none", color: "#fff", borderRadius: 12, padding: "8px 14px", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>⏹ Stop</button>
+              </>
             )}
-            {recordingUrl && <button onClick={playBack} style={{ background: "#eaf3fa", border: "2px solid #d6e6f2", color: "#2b6f86", borderRadius: 12, padding: "8px 14px", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>▶ Play back</button>}
+            {phase === "build" && (
+              <>
+                <h2 style={{ margin: "0 0 2px" }}>Pick a block!</h2>
+                <div style={{ fontWeight: 700, color: "#567" }}>Drag it onto your tower: left, middle, or right. Or tap it.</div>
+                <div className="wt-opts">
+                  {choices.map((c, i) => (
+                    <Draggable key={i} onDrop={(x, yy) => dropOnStage(c, x, yy)} onTap={() => place(c)}>
+                      <div className="wt-opt">
+                        <BlockView b={c} scale={0.8} />
+                        {COLOR_NAMES[c.color]} {SHAPES[c.shape].label.toLowerCase()}
+                      </div>
+                    </Draggable>
+                  ))}
+                </div>
+                {Math.abs(lean(blocks)) > 22 && <p style={{ fontWeight: 800, color: "#c26a00" }}>Wobbly! Try the other side.</p>}
+              </>
+            )}
+            {phase === "top" && (
+              <>
+                <h2 style={{ margin: "0 0 2px" }}>What goes on top?</h2>
+                <div style={{ fontWeight: 700, color: "#567" }}>Pick one. Each one brings a surprise!</div>
+                <div className="wt-opts">
+                  {(["flag", "star", "roof"] as Topper[]).map((t) => (
+                    <button key={t} className="wt-opt" style={{ cursor: "pointer", fontFamily: "inherit" }} onClick={() => chooseTopper(t)}>
+                      <TopperView t={t} size={52} />
+                      {t === "flag" ? "Flag" : t === "star" ? "Star" : "Roof"}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
-          {micError && <div style={{ fontSize: 12, color: "#c0392b", marginTop: 6, textAlign: "center" }}>{micError}</div>}
-        </div>
-
-        {/* score buttons */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <button onClick={play} disabled={fx} style={{ padding: "18px 12px", borderRadius: 16, border: "none", background: "linear-gradient(135deg,#27c06b,#1ea65a)", color: "white", fontSize: 18, fontWeight: 900, cursor: fx ? "default" : "pointer", opacity: fx ? 0.7 : 1 }}>
-            🧱 Stack it! <span style={{ opacity: 0.7, fontSize: 13 }}>(G)</span>
-          </button>
-          <button onClick={() => { sfx("fail"); advance(false); }} disabled={fx} style={{ padding: "18px 12px", borderRadius: 16, border: "none", background: "#e3edf3", color: "#5a7182", fontSize: 18, fontWeight: 900, cursor: fx ? "default" : "pointer" }}>
-            Not yet ▶ <span style={{ opacity: 0.7, fontSize: 13 }}>(N)</span>
-          </button>
+          {stage}
         </div>
       </div>
-    </div>
+    </div></div>
   );
 }
