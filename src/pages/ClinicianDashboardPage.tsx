@@ -89,6 +89,16 @@ const SOUND_OPTIONS = [
   "st", "sp", "bl", "gr", "tr", "pr", "fr", "dr", "sw", "sn",
 ];
 
+// Vocalic /r/ (r after a vowel): car, door, bird, chair, ear, fire.
+const VOCALIC_R_OPTIONS = [
+  { key: "ar", example: "car" },
+  { key: "or", example: "door" },
+  { key: "er", example: "bird" },
+  { key: "air", example: "chair" },
+  { key: "ear", example: "deer" },
+  { key: "ire", example: "fire" },
+];
+
 const DEFAULT_WORDS = [
   "apple", "bacon", "baking", "ball", "baseball", "bath", "bear", "begging",
   "bench", "bicycle", "bike", "birthday", "book", "brush", "bug", "bus",
@@ -599,6 +609,36 @@ export default function ClinicianDashboardPage() {
                         }}
                       >
                         {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#567", marginBottom: 8 }}>
+                  Quick pick vocalic /r/
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {VOCALIC_R_OPTIONS.map(({ key, example }) => {
+                    const label = `/${key}/`;
+                    const isSelected = targetSound === label;
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => setTargetSound(label)}
+                        style={{
+                          padding: "8px 14px",
+                          borderRadius: 12,
+                          border: isSelected ? "2px solid #d97706" : "1px solid #f3e1c4",
+                          background: isSelected ? "#fef3c7" : "#fffbf3",
+                          color: "#7c4a03",
+                          fontWeight: 700,
+                          fontSize: 14,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {label} <span style={{ fontWeight: 500, opacity: 0.75 }}>{example}</span>
                       </button>
                     );
                   })}
