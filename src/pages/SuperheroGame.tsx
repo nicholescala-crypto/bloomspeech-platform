@@ -3,7 +3,7 @@ import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { speak, sfx, unlockAudio } from "../games/audio";
 
 // ---------------------------------------------------------------------------
-// Superhero: the child designs a hero (cape color + chest symbol). Grumpy,
+// Superhero: the child picks one of four kid heroes. Grumpy,
 // silly villains are causing trouble. For each word the child SAYS IT TWICE
 // (grown-up taps Got it / Try again; every try counts), then DRAGS a super
 // power onto the villain (freeze, bubble, tickle, glitter). Each power does
@@ -17,13 +17,12 @@ type Power = "freeze" | "bubble" | "tickle" | "glitter";
 type VillainKey = "cloud" | "sock" | "robot";
 
 const SAYS_PER_WORD = 2;
-const CAPES = [
-  { name: "Red", color: "#e53935" },
-  { name: "Blue", color: "#1e88e5" },
-  { name: "Purple", color: "#8e24aa" },
-  { name: "Green", color: "#43a047" },
+const HEROES = [
+  { id: "red", name: "Star Hero" },
+  { id: "blue", name: "Lightning Hero" },
+  { id: "purple", name: "Heart Hero" },
+  { id: "green", name: "Leaf Hero" },
 ];
-type Emblem = "star" | "bolt" | "heart";
 const POWERS: Record<Power, { label: string; color: string; react: string }> = {
   freeze: { label: "Freeze ray", color: "#4fc3f7", react: "Brrr! Frozen still!" },
   bubble: { label: "Bubble trap", color: "#b39ddb", react: "Stuck in a bubble! Boing!" },
@@ -71,84 +70,26 @@ function goBack() {
 }
 
 // ── Drawings ───────────────────────────────────────────────────────
-function EmblemShape({ e, cx, cy, r, fill }: { e: Emblem; cx: number; cy: number; r: number; fill: string }) {
-  if (e === "star") {
-    const pts = Array.from({ length: 10 }, (_, i) => {
-      const rr = i % 2 ? r * 0.45 : r;
-      const a = (Math.PI / 5) * i - Math.PI / 2;
-      return `${cx + rr * Math.cos(a)},${cy + rr * Math.sin(a)}`;
-    }).join(" ");
-    return <polygon points={pts} fill={fill} />;
-  }
-  if (e === "bolt") return <polygon points={`${cx + r * 0.2},${cy - r} ${cx - r * 0.6},${cy + r * 0.1} ${cx},${cy + r * 0.1} ${cx - r * 0.2},${cy + r} ${cx + r * 0.6},${cy - r * 0.1} ${cx},${cy - r * 0.1}`} fill={fill} />;
-  return <path d={`M${cx} ${cy + r * 0.8} C${cx - r * 1.4} ${cy - r * 0.1} ${cx - r * 0.7} ${cy - r * 1.2} ${cx} ${cy - r * 0.4} C${cx + r * 0.7} ${cy - r * 1.2} ${cx + r * 1.4} ${cy - r * 0.1} ${cx} ${cy + r * 0.8} Z`} fill={fill} />;
-}
 
-function Hero({ cape, emblem, size = 140, pose = "stand" }: { cape: string; emblem: Emblem; size?: number; pose?: "stand" | "zap" }) {
-  return (
-    <svg viewBox="0 0 100 140" width={size * 0.72} height={size} style={{ overflow: "visible", display: "block" }}>
-      <path d="M30 46 L14 128 Q50 118 86 128 L70 46 Z" fill={cape} />
-      <rect x="34" y="44" width="32" height="44" rx="10" fill="#3949ab" />
-      <circle cx="50" cy="64" r="11" fill="#fff" />
-      <EmblemShape e={emblem} cx={50} cy={64} r={8} fill={cape} />
-      <rect x="36" y="86" width="12" height="34" rx="5" fill="#3949ab" />
-      <rect x="52" y="86" width="12" height="34" rx="5" fill="#3949ab" />
-      <rect x="34" y="116" width="16" height="10" rx="4" fill={cape} />
-      <rect x="50" y="116" width="16" height="10" rx="4" fill={cape} />
-      {pose === "zap" ? <rect x="64" y="46" width="30" height="10" rx="5" fill="#3949ab" /> : <rect x="64" y="48" width="10" height="30" rx="5" fill="#3949ab" />}
-      <rect x="26" y="48" width="10" height="30" rx="5" fill="#3949ab" />
-      <circle cx="50" cy="28" r="18" fill="#f2c6a0" />
-      <path d="M32 24 Q36 8 50 8 Q66 8 68 24 Q60 16 50 18 Q40 16 32 24 Z" fill="#4e342e" />
-      <rect x="35" y="22" width="30" height="9" rx="4" fill={cape} />
-      <circle cx="43" cy="27" r="2.6" fill="#222" /><circle cx="57" cy="27" r="2.6" fill="#222" />
-      <path d="M43 36 Q50 42 57 36" stroke="#7b1f1f" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-    </svg>
-  );
+function Hero({ hero, size = 140 }: { hero: string; size?: number }) {
+  return <img src={`/game-art/hero-${hero}.png`} alt="your hero" width={size} height={size} draggable={false} style={{ display: "block", objectFit: "contain" }} />;
 }
 
 function Villain({ v, friendly, effect, size = 150 }: { v: VillainKey; friendly: boolean; effect: Power | null; size?: number }) {
-  const mouth = friendly ? <path d="M38 76 Q50 88 62 76" stroke="#333" strokeWidth="4" fill="none" strokeLinecap="round" />
-    : effect === "tickle" ? <ellipse cx="50" cy="78" rx="10" ry="8" fill="#5d1f1f" />
-    : <path d="M38 82 Q50 72 62 82" stroke="#333" strokeWidth="4" fill="none" strokeLinecap="round" />;
-  const brows = friendly ? null : <><path d="M32 48 L44 52" stroke="#333" strokeWidth="3.5" /><path d="M68 48 L56 52" stroke="#333" strokeWidth="3.5" /></>;
-  const eyes = <><circle cx="40" cy="60" r="5" fill="#222" /><circle cx="60" cy="60" r="5" fill="#222" /></>;
-  let body: ReactNode;
-  if (v === "cloud") {
-    body = (
-      <>
-        <path d="M18 80 Q4 80 6 64 Q8 48 26 50 Q28 28 50 30 Q70 26 76 46 Q96 44 94 64 Q94 82 76 82 Z" fill={friendly ? "#e3f2fd" : "#78909c"} />
-        {!friendly && [26, 46, 66].map((x) => <path key={x} d={`M${x} 90 l-4 10`} stroke="#4fc3f7" strokeWidth="3" />)}
-        {friendly && <path d="M10 98 A40 30 0 0 1 90 98" stroke="#ffb74d" strokeWidth="5" fill="none" />}
-      </>
-    );
-  } else if (v === "sock") {
-    body = (
-      <>
-        <path d="M30 10 H66 V64 Q66 96 40 96 Q18 96 18 80 Q18 66 30 64 Z" fill={friendly ? "#a5d6a7" : "#9575cd"} />
-        <rect x="30" y="10" width="36" height="12" fill={friendly ? "#81c784" : "#7e57c2"} />
-        {[26, 40, 54].map((y) => <rect key={y} x="30" y={y} width="36" height="4" fill="rgba(255,255,255,.35)" />)}
-      </>
-    );
-  } else {
-    body = (
-      <>
-        <line x1="50" y1="14" x2="50" y2="26" stroke="#607d8b" strokeWidth="3" /><circle cx="50" cy="12" r="5" fill={friendly ? "#66bb6a" : "#ef5350"} />
-        <rect x="20" y="26" width="60" height="66" rx="12" fill={friendly ? "#b0bec5" : "#90a4ae"} />
-        <rect x="30" y="50" width="40" height="22" rx="6" fill="#eceff1" />
-      </>
-    );
-  }
+  const cls = effect === "tickle" && !friendly ? "sh-wiggle" : friendly ? "sh-bounce" : "sh-hover";
   return (
-    <svg viewBox="0 0 100 110" width={size} height={size * 1.1} style={{ overflow: "visible", display: "block" }}
-      className={effect === "tickle" && !friendly ? "sh-wiggle" : friendly ? "sh-bounce" : "sh-hover"}>
-      {body}
-      {v === "robot" ? <g transform="translate(0 2)">{eyes}{brows}{mouth}</g> : <g>{eyes}{brows}{mouth}</g>}
-      {effect === "freeze" && !friendly && <rect x="2" y="4" width="96" height="100" rx="14" fill="rgba(179,229,252,.55)" stroke="#81d4fa" strokeWidth="3" />}
-      {effect === "bubble" && !friendly && <circle cx="50" cy="56" r="54" fill="rgba(209,196,233,.35)" stroke="#b39ddb" strokeWidth="3" />}
-      {effect === "glitter" && !friendly && [[14, 20], [86, 24], [20, 92], [84, 88], [50, 6]].map(([x, y], i) => (
-        <polygon key={i} points={`${x},${y - 7} ${x + 2},${y - 2} ${x + 7},${y} ${x + 2},${y + 2} ${x},${y + 7} ${x - 2},${y + 2} ${x - 7},${y} ${x - 2},${y - 2}`} fill="#ffd54f" className="sh-twinkle" />
-      ))}
-    </svg>
+    <div className={cls} style={{ position: "relative", width: size, height: size }}>
+      <img src={`/game-art/villain-${v}-${friendly ? "happy" : "grumpy"}.png`} alt={VILLAINS[v].name} width={size} height={size} draggable={false} style={{ display: "block", objectFit: "contain" }} />
+      {!friendly && effect && (
+        <svg viewBox="0 0 100 100" width={size} height={size} style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+          {effect === "freeze" && <rect x="4" y="4" width="92" height="92" rx="16" fill="rgba(179,229,252,.5)" stroke="#81d4fa" strokeWidth="3" />}
+          {effect === "bubble" && <circle cx="50" cy="50" r="47" fill="rgba(209,196,233,.3)" stroke="#b39ddb" strokeWidth="3" />}
+          {effect === "glitter" && [[14, 16], [86, 20], [16, 86], [84, 84], [50, 6]].map(([x, y], i) => (
+            <polygon key={i} points={`${x},${y - 7} ${x + 2},${y - 2} ${x + 7},${y} ${x + 2},${y + 2} ${x},${y + 7} ${x - 2},${y + 2} ${x - 7},${y} ${x - 2},${y - 2}`} fill="#ffd54f" className="sh-twinkle" />
+          ))}
+        </svg>
+      )}
+    </div>
   );
 }
 
@@ -243,8 +184,7 @@ const CSS = `
 export default function SuperheroGame() {
   const [{ sound, words }] = useState(readParams);
   const [phase, setPhase] = useState<Phase>("intro");
-  const [cape, setCape] = useState(CAPES[0].color);
-  const [emblem, setEmblem] = useState<Emblem>("star");
+  const [hero, setHero] = useState(HEROES[0].id);
   const [rounds, setRounds] = useState<string[][]>([]);
   const [vIdx, setVIdx] = useState(0);
   const [wIdx, setWIdx] = useState(0);
@@ -341,25 +281,13 @@ export default function SuperheroGame() {
           <p style={{ margin: 0, fontWeight: 700, color: "#e8eaf6" }}>Grumpy villains are causing trouble. Use your words and super powers to cheer them up!</p>
         </div>
         <div className="sh-card" style={{ display: "flex", gap: 14, alignItems: "center", justifyContent: "center", flexWrap: "wrap" }}>
-          <Hero cape={cape} emblem={emblem} size={170} />
-          <div style={{ textAlign: "left" }}>
-            <div style={{ fontWeight: 900, margin: "4px 0" }}>Pick your cape</div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {CAPES.map((c) => (
-                <button key={c.name} className="sh-pick" style={{ background: c.color, borderColor: cape === c.color ? "#1a237e" : "transparent" }}
-                  onClick={() => { setCape(c.color); sfx("tap"); }}>{c.name}</button>
-              ))}
-            </div>
-            <div style={{ fontWeight: 900, margin: "10px 0 4px" }}>Pick your symbol</div>
-            <div style={{ display: "flex", gap: 6 }}>
-              {(["star", "bolt", "heart"] as Emblem[]).map((e) => (
-                <button key={e} onClick={() => { setEmblem(e); sfx("tap"); }}
-                  style={{ background: "#f3f4fb", border: emblem === e ? "3px solid #1a237e" : "3px solid #c5cae9", borderRadius: 14, padding: 6, cursor: "pointer" }}>
-                  <svg viewBox="0 0 40 40" width="40" height="40"><EmblemShape e={e} cx={20} cy={20} r={14} fill={cape} /></svg>
-                </button>
-              ))}
-            </div>
-          </div>
+          <div style={{ width: "100%", fontWeight: 900 }}>Pick your hero</div>
+          {HEROES.map((h) => (
+            <button key={h.id} onClick={() => { setHero(h.id); sfx("tap"); }}
+              style={{ background: hero === h.id ? "#e8eaf6" : "#fff", border: hero === h.id ? "3px solid #1a237e" : "3px solid #c5cae9", borderRadius: 16, padding: 6, cursor: "pointer", fontFamily: "inherit", fontWeight: 800, color: "#1a237e" }}>
+              <Hero hero={h.id} size={110} />{h.name}
+            </button>
+          ))}
         </div>
         <button className="sh-big sh-go" style={{ marginTop: 14 }} onClick={start}>Save the day</button>
         <p style={{ textAlign: "center", color: "#e8eaf6", fontSize: 14, fontWeight: 700 }}>Grown-up: after each try, tap Got it or Try again.</p>
@@ -376,7 +304,7 @@ export default function SuperheroGame() {
           <h1 style={{ margin: "4px 0" }}>You saved the day!</h1>
           <p style={{ fontWeight: 800, margin: 0 }}>Every villain is now your friend. Here's your new team:</p>
           <div className="sh-arena" style={{ marginTop: 10 }}>
-            <Hero cape={cape} emblem={emblem} size={130} />
+            <Hero hero={hero} size={130} />
             {friends.map((f) => <Villain key={f} v={f} friendly effect={null} size={105} />)}
           </div>
           <p style={{ fontWeight: 800, fontSize: 18, margin: "10px 0 6px" }}>You practiced {log.length} times. Grown-up marked {got} of {log.length} tries correct.</p>
@@ -398,7 +326,7 @@ export default function SuperheroGame() {
 
   const arena = (
     <div className="sh-arena">
-      <Hero cape={cape} emblem={emblem} size={130} pose={phase === "power" ? "zap" : "stand"} />
+      <Hero hero={hero} size={140} />
       <div ref={targetRef} className={`sh-target ${hot ? "hot" : ""}`}>
         <Villain v={villain} friendly={phase === "friend"} effect={effect} size={120} />
       </div>
