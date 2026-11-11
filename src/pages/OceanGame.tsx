@@ -60,68 +60,12 @@ function goBack() {
 }
 
 // ── Drawings ───────────────────────────────────────────────────────
+const ANIMAL_ART: Record<Animal, string> = {
+  fish: "fish-orange", turtle: "turtle", octopus: "octopus", crab: "crab", jelly: "jellyfish", seahorse: "seahorse", star: "starfish",
+};
 function AnimalView({ a, hue = 0, size = 60, glow = false }: { a: Animal; hue?: number; size?: number; glow?: boolean }) {
-  const c = FISH_COLORS[hue % FISH_COLORS.length];
-  return (
-    <svg viewBox="0 0 60 60" width={size} height={size} style={{ display: "block", overflow: "visible", filter: glow ? "drop-shadow(0 0 10px #e1bee7)" : undefined }}>
-      {a === "fish" && (
-        <>
-          <polygon points="8,30 0,18 0,42" fill={c} />
-          <ellipse cx="30" cy="30" rx="22" ry="14" fill={c} />
-          <path d="M22 18 Q30 8 36 18" fill={c} />
-          <circle cx="42" cy="27" r="4" fill="#fff" /><circle cx="43" cy="27" r="2" fill="#222" />
-          <path d="M24 22 Q20 30 24 38" stroke="rgba(0,0,0,.2)" strokeWidth="2" fill="none" />
-        </>
-      )}
-      {a === "turtle" && (
-        <>
-          <ellipse cx="14" cy="22" rx="8" ry="4" fill="#81c784" transform="rotate(-30 14 22)" />
-          <ellipse cx="14" cy="40" rx="8" ry="4" fill="#81c784" transform="rotate(30 14 40)" />
-          <ellipse cx="44" cy="20" rx="8" ry="4" fill="#81c784" transform="rotate(30 44 20)" />
-          <ellipse cx="44" cy="42" rx="8" ry="4" fill="#81c784" transform="rotate(-30 44 42)" />
-          <circle cx="54" cy="31" r="6" fill="#81c784" /><circle cx="56" cy="29" r="1.5" fill="#222" />
-          <ellipse cx="30" cy="31" rx="20" ry="15" fill="#558b2f" />
-          <path d="M30 17 V45 M14 31 H46 M20 21 L40 41 M40 21 L20 41" stroke="#8bc34a" strokeWidth="2" />
-        </>
-      )}
-      {a === "octopus" && (
-        <>
-          {[12, 20, 28, 36, 44].map((x, i) => <path key={x} d={`M${x} 34 Q${x + (i % 2 ? 6 : -6)} 46 ${x} 56`} stroke="#ba68c8" strokeWidth="5" fill="none" strokeLinecap="round" />)}
-          <ellipse cx="28" cy="24" rx="20" ry="17" fill="#ba68c8" />
-          <circle cx="21" cy="24" r="4" fill="#fff" /><circle cx="35" cy="24" r="4" fill="#fff" />
-          <circle cx="21" cy="25" r="2" fill="#222" /><circle cx="35" cy="25" r="2" fill="#222" />
-          <path d="M23 32 Q28 36 33 32" stroke="#6a1b9a" strokeWidth="2" fill="none" />
-        </>
-      )}
-      {a === "crab" && (
-        <>
-          <path d="M14 30 L6 18 M46 30 L54 18" stroke="#e53935" strokeWidth="3" />
-          <circle cx="6" cy="16" r="5" fill="#e53935" /><circle cx="54" cy="16" r="5" fill="#e53935" />
-          {[16, 24, 36, 44].map((x) => <path key={x} d={`M${x} 40 L${x + (x < 30 ? -6 : 6)} 50`} stroke="#e53935" strokeWidth="3" />)}
-          <ellipse cx="30" cy="36" rx="18" ry="11" fill="#ef5350" />
-          <circle cx="24" cy="24" r="3" fill="#fff" /><circle cx="36" cy="24" r="3" fill="#fff" />
-          <circle cx="24" cy="24" r="1.5" fill="#222" /><circle cx="36" cy="24" r="1.5" fill="#222" />
-        </>
-      )}
-      {a === "jelly" && (
-        <>
-          {[18, 26, 34, 42].map((x) => <path key={x} d={`M${x} 30 Q${x - 4} 42 ${x} 54`} stroke={glow ? "#f3e5f5" : "#ce93d8"} strokeWidth="3" fill="none" />)}
-          <path d="M10 30 Q10 6 30 6 Q50 6 50 30 Z" fill={glow ? "#f3e5f5" : "#ce93d8"} opacity=".9" />
-          <circle cx="24" cy="20" r="2" fill="#4a148c" /><circle cx="36" cy="20" r="2" fill="#4a148c" />
-        </>
-      )}
-      {a === "seahorse" && (
-        <>
-          <path d="M34 8 Q46 10 42 22 Q38 30 42 40 Q46 52 34 54 Q28 54 30 48 Q36 46 32 40 Q26 30 30 20 Q24 18 22 14 Q26 8 34 8 Z" fill="#ffb74d" />
-          <circle cx="36" cy="14" r="2" fill="#222" />
-          <path d="M42 26 l6 -2 l-4 6 z" fill="#ffa726" />
-        </>
-      )}
-      {a === "star" && (
-        <polygon points="30,4 37,22 56,23 41,35 46,54 30,43 14,54 19,35 4,23 23,22" fill="#ff8a65" stroke="#e64a19" strokeWidth="2" />
-      )}
-    </svg>
-  );
+  const art = a === "fish" ? (hue % 2 ? "fish-blue" : "fish-orange") : a === "jelly" && glow ? "jellyfish-glow" : ANIMAL_ART[a];
+  return <img src={`/game-art/sea-${art}.png`} alt={ANIMALS[a]} width={size} height={size} draggable={false} style={{ display: "block", objectFit: "contain" }} />;
 }
 
 function WordPic({ word, size }: { word: string; size: number }) {
@@ -299,7 +243,7 @@ export default function OceanGame() {
       {placed.map((p, i) => (
         <div key={i} className={`${BOTTOM.includes(p.a) ? "oc-sit" : "oc-swim"} ${i === placed.length - 1 && phase !== "done" ? "oc-new" : ""}`}
           style={{ left: `${p.x}%`, top: `${p.y}%`, animationDelay: `${(i % 5) * 0.5}s` }}>
-          <AnimalView a={p.a} hue={p.hue} size={54} glow={light === "night" && p.a === "jelly"} />
+          <AnimalView a={p.a} hue={p.hue} size={70} glow={light === "night" && p.a === "jelly"} />
         </div>
       ))}
       <div style={{ position: "absolute", top: 8, right: 12, fontWeight: 900, color: "#fff", textShadow: "0 1px 3px rgba(0,0,0,.4)" }}>{placed.length} {placed.length === 1 ? "sea friend" : "sea friends"}</div>
@@ -377,7 +321,7 @@ export default function OceanGame() {
             <div className="oc-opts">
               {choices.map((c) => (
                 <Draggable key={c.a} onTap={() => place(c, null)} onDrop={(x, y) => { const s = seaSpot(x, y); if (s) place(c, s); }}>
-                  <div className="oc-opt"><AnimalView a={c.a} hue={c.hue} size={56} />{ANIMALS[c.a]}</div>
+                  <div className="oc-opt"><AnimalView a={c.a} hue={c.hue} size={66} />{ANIMALS[c.a]}</div>
                 </Draggable>
               ))}
             </div>
