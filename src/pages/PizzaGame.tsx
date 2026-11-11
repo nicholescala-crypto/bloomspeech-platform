@@ -107,23 +107,8 @@ function Pizza({ sauce, pieces, size = 240, baked = false }: { sauce?: Sauce; pi
 }
 
 function Customer({ c, mood = "wait", size = 90 }: { c: (typeof CUSTOMERS)[number]; mood?: "wait" | "love" | "wow"; size?: number }) {
-  return (
-    <svg viewBox="0 0 80 80" width={size} height={size}>
-      <circle cx="40" cy="44" r="28" fill={c.skin} />
-      <path d="M12 40 Q14 12 40 12 Q66 12 68 40 Q56 24 40 26 Q24 24 12 40 Z" fill={c.hair} />
-      {mood === "love" ? (
-        <>
-          <path d="M26 42 q4 -6 8 0" stroke="#333" strokeWidth="3" fill="none" />
-          <path d="M46 42 q4 -6 8 0" stroke="#333" strokeWidth="3" fill="none" />
-        </>
-      ) : (
-        <><circle cx="30" cy="42" r="3.5" fill="#333" /><circle cx="50" cy="42" r="3.5" fill="#333" /></>
-      )}
-      {mood === "wow" ? <ellipse cx="40" cy="58" rx="6" ry="7" fill="#7b1f1f" />
-        : <path d={mood === "love" ? "M28 54 Q40 68 52 54" : "M31 56 Q40 62 49 56"} stroke="#7b1f1f" strokeWidth="3.5" fill={mood === "love" ? "#fff" : "none"} strokeLinecap="round" />}
-      <circle cx="24" cy="52" r="4" fill="#ff8a80" opacity=".5" /><circle cx="56" cy="52" r="4" fill="#ff8a80" opacity=".5" />
-    </svg>
-  );
+  const face = mood === "wait" ? "wait" : "happy";
+  return <img src={`/game-art/customer-${c.name.toLowerCase()}-${face}.png`} alt={c.name} width={size} height={size} draggable={false} style={{ display: "block", objectFit: "contain", margin: "0 auto" }} />;
 }
 
 function WordPic({ word, size }: { word: string; size: number }) {
@@ -346,7 +331,7 @@ export default function PizzaGame() {
 
   const wishBubble = (
     <div className="pz-wish">
-      <Customer c={cust} size={56} />
+      <Customer c={cust} size={64} />
       <span>I'd love</span>
       {wish.map((t) => (
         <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
@@ -429,7 +414,7 @@ export default function PizzaGame() {
       {phase === "order" && (
         <div className="pz-card">
           <h2 style={{ margin: "0 0 8px" }}>Hi! I'm {cust.name}. Pick a sauce for my pizza!</h2>
-          <div style={{ display: "flex", justifyContent: "center" }}><Pizza sauce={sauce} pieces={[]} size={180} /></div>
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 16 }}><Customer c={cust} size={150} /><Pizza sauce={sauce} pieces={[]} size={180} /></div>
           <div className="pz-bin">
             {SAUCES.map((s) => (
               <button key={s.id} className="pz-tbtn" style={{ cursor: "pointer", fontFamily: "inherit" }} onClick={() => pickSauce(s.id)}>

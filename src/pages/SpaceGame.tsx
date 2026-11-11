@@ -14,7 +14,7 @@ import { speak, sfx, unlockAudio } from "../games/audio";
 type Phase = "intro" | "say" | "search" | "fly" | "won";
 type Try = "got" | "effort";
 type Find = { kind: "alien"; alien: AlienLook } | { kind: "gem" } | { kind: "fuel" };
-type AlienLook = { color: string; eyes: 1 | 2 | 3; antenna: boolean; name: string };
+type AlienLook = { art: number; name: string };
 
 const SAYS_PER_WORD = 2;
 const WORDS_PER_PLANET = 3;
@@ -32,7 +32,6 @@ const SHIP_COLORS = [
   { name: "Green", color: "#43a047" },
 ];
 const ALIEN_NAMES = ["Zib", "Blorp", "Kiki", "Mox", "Tuli", "Pim", "Zorb", "Nibs", "Lulu", "Grib", "Fizz", "Oot"];
-const ALIEN_COLORS = ["#8bc34a", "#ff80ab", "#4dd0e1", "#ffb74d", "#b39ddb", "#f06292", "#aed581"];
 
 function readParams() {
   const p = new URLSearchParams(window.location.search);
@@ -65,14 +64,10 @@ function buildTrip(words: string[]): string[][] {
   return Array.from({ length: planets }, (_, i) => q.slice(i * WORDS_PER_PLANET, (i + 1) * WORDS_PER_PLANET));
 }
 
-function newAlien(used: string[]): AlienLook {
-  const names = ALIEN_NAMES.filter((n) => !used.includes(n));
-  return {
-    color: pick(ALIEN_COLORS),
-    eyes: pick([1, 2, 3] as const),
-    antenna: Math.random() < 0.6,
-    name: pick(names.length ? names : ALIEN_NAMES),
-  };
+function newAlien(used: AlienLook[]): AlienLook {
+  const freeArt = [1, 2, 3, 4, 5, 6, 7, 8].filter((n) => !used.some((u) => u.art === n));
+  const names = ALIEN_NAMES.filter((n) => !used.some((u) => u.name === n));
+  return { art: pick(freeArt.length ? freeArt : [1, 2, 3, 4, 5, 6, 7, 8]), name: pick(names.length ? names : ALIEN_NAMES) };
 }
 
 function goBack() {
@@ -82,25 +77,7 @@ function goBack() {
 
 // ── Drawings ───────────────────────────────────────────────────────
 function Alien({ a, size = 80, wave = false }: { a: AlienLook; size?: number; wave?: boolean }) {
-  const eyeXs = a.eyes === 1 ? [40] : a.eyes === 2 ? [30, 50] : [24, 40, 56];
-  return (
-    <svg viewBox="0 0 80 90" width={size} height={size * 1.12} className={wave ? "sm-wave" : ""}>
-      {a.antenna && (
-        <>
-          <line x1="30" y1="20" x2="22" y2="4" stroke={a.color} strokeWidth="3" />
-          <line x1="50" y1="20" x2="58" y2="4" stroke={a.color} strokeWidth="3" />
-          <circle cx="22" cy="4" r="4" fill="#ffeb3b" /><circle cx="58" cy="4" r="4" fill="#ffeb3b" />
-        </>
-      )}
-      <path d="M10 86 Q6 22 40 18 Q74 22 70 86 Z" fill={a.color} />
-      {eyeXs.map((x) => (
-        <g key={x}><circle cx={x} cy="44" r="8" fill="#fff" /><circle cx={x} cy="45" r="4" fill="#222" /></g>
-      ))}
-      <path d="M28 64 Q40 74 52 64" stroke="#333" strokeWidth="3" fill="none" strokeLinecap="round" />
-      <ellipse cx="8" cy="62" rx="5" ry="10" fill={a.color} transform="rotate(-25 8 62)" />
-      <ellipse cx="72" cy="62" rx="5" ry="10" fill={a.color} transform="rotate(25 72 62)" />
-    </svg>
-  );
+  return <img src={`/game-art/alien-${a.art}.png`} alt={a.name} width={size} height={size} draggable={false} className={wave ? "sm-wave" : ""} style={{ display: "block", objectFit: "contain", margin: "0 auto" }} />;
 }
 
 const Gem = ({ size = 64 }: { size?: number }) => (
@@ -309,7 +286,7 @@ export default function SpaceGame() {
       const last = wordIdx === WORDS_PER_PLANET - 1;
       const r = Math.random();
       const f: Find = (last && !alienHere) || r < 0.45
-        ? { kind: "alien", alien: newAlien(crew.map((c) => c.name)) }
+        ? { kind: "alien", alien: newAlien(crew) }
         : r < 0.75 ? { kind: "gem" } : { kind: "fuel" };
       setFind(f);
       window.setTimeout(() => setPhase("search"), 450);
@@ -364,7 +341,7 @@ export default function SpaceGame() {
       <div className="sm-page"><style>{CSS}</style>{stars}<div className="sm-wrap">
         <button className="sm-chip" onClick={goBack}>Back</button>
         <div style={{ textAlign: "center", margin: "10px 0 14px" }}>
-          <Alien a={{ color: "#8bc34a", eyes: 3, antenna: true, name: "Zib" }} size={70} wave />
+          <Alien a={{ art: 1, name: "Zib" }} size={90} wave />
           <h1 style={{ fontSize: 32, margin: "4px 0" }}>Star Mission</h1>
           <p style={{ color: "#cfd8ff", fontWeight: 700, margin: 0 }}>Some little aliens are lost! Fly to each planet and find them.</p>
           <p style={{ color: "#cfd8ff", fontWeight: 700, margin: "4px 0 0" }}>Say each word 2 times, then pick a crater to search.</p>
@@ -415,7 +392,7 @@ export default function SpaceGame() {
         <div key={i} className="sm-dot" style={{ background: PLANETS[i % PLANETS.length].color, opacity: i <= planet ? 1 : 0.35, boxShadow: i === planet ? "0 0 0 3px #fff" : "none" }} />
       ))}
       <div className="sm-crew">
-        {crew.slice(-6).map((a, i) => <Alien key={i} a={a} size={30} />)}
+        {crew.slice(-6).map((a, i) => <Alien key={i} a={a} size={36} />)}
       </div>
     </div>
   );

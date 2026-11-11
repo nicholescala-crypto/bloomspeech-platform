@@ -61,47 +61,7 @@ const BUDDIES = ["Fox", "Bear", "Owl", "Frog"] as const;
 type Buddy = (typeof BUDDIES)[number];
 
 function BuddyFace({ who, size = 56 }: { who: Buddy; size?: number }) {
-  return (
-    <svg viewBox="0 0 60 60" width={size} height={size}>
-      {who === "Fox" && (
-        <>
-          <polygon points="10,8 22,22 8,28" fill="#e8762d" />
-          <polygon points="50,8 38,22 52,28" fill="#e8762d" />
-          <circle cx="30" cy="34" r="20" fill="#f08a3c" />
-          <path d="M14 38 Q30 58 46 38 Q30 46 14 38 Z" fill="#fff" />
-          <circle cx="23" cy="30" r="3" fill="#222" /><circle cx="37" cy="30" r="3" fill="#222" />
-          <circle cx="30" cy="42" r="3" fill="#222" />
-        </>
-      )}
-      {who === "Bear" && (
-        <>
-          <circle cx="13" cy="15" r="8" fill="#8d5a3b" /><circle cx="47" cy="15" r="8" fill="#8d5a3b" />
-          <circle cx="30" cy="33" r="21" fill="#a0694a" />
-          <ellipse cx="30" cy="41" rx="10" ry="8" fill="#e3c0a0" />
-          <circle cx="22" cy="29" r="3" fill="#222" /><circle cx="38" cy="29" r="3" fill="#222" />
-          <ellipse cx="30" cy="38" rx="3.5" ry="2.5" fill="#222" />
-        </>
-      )}
-      {who === "Owl" && (
-        <>
-          <polygon points="12,10 20,20 10,22" fill="#7b6a58" /><polygon points="48,10 40,20 50,22" fill="#7b6a58" />
-          <ellipse cx="30" cy="34" rx="21" ry="22" fill="#8d7b67" />
-          <circle cx="21" cy="30" r="9" fill="#fff" /><circle cx="39" cy="30" r="9" fill="#fff" />
-          <circle cx="21" cy="30" r="4" fill="#222" /><circle cx="39" cy="30" r="4" fill="#222" />
-          <polygon points="30,36 26,41 34,41" fill="#f2a52b" />
-        </>
-      )}
-      {who === "Frog" && (
-        <>
-          <circle cx="18" cy="18" r="9" fill="#5cb85c" /><circle cx="42" cy="18" r="9" fill="#5cb85c" />
-          <circle cx="18" cy="17" r="4.5" fill="#fff" /><circle cx="42" cy="17" r="4.5" fill="#fff" />
-          <circle cx="18" cy="17" r="2.2" fill="#222" /><circle cx="42" cy="17" r="2.2" fill="#222" />
-          <ellipse cx="30" cy="36" rx="22" ry="17" fill="#6cc66c" />
-          <path d="M18 38 Q30 48 42 38" stroke="#2e7d32" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-        </>
-      )}
-    </svg>
-  );
+  return <img src={`/game-art/buddy-${who.toLowerCase()}.png`} alt={who} width={size} height={size} draggable={false} style={{ display: "block", objectFit: "contain" }} />;
 }
 
 const PATHS: Record<PathKey, { label: string; find: string; color: string }> = {
@@ -111,31 +71,9 @@ const PATHS: Record<PathKey, { label: string; find: string; color: string }> = {
   mountain: { label: "Mountain path", find: "an eagle feather", color: "#6d4c41" },
 };
 
+const KEEPSAKE_ART: Record<PathKey, string> = { forest: "pinecone", river: "shell", cave: "crystal", mountain: "feather" };
 function Keepsake({ k, size = 46 }: { k: PathKey; size?: number }) {
-  return (
-    <svg viewBox="0 0 40 40" width={size} height={size}>
-      {k === "forest" && (
-        <>
-          <ellipse cx="20" cy="22" rx="10" ry="14" fill="#8d5a3b" />
-          {[12, 18, 24, 30].map((y) => <path key={y} d={`M11 ${y} Q20 ${y + 5} 29 ${y}`} stroke="#5d3a24" strokeWidth="2" fill="none" />)}
-          <rect x="18" y="4" width="4" height="6" fill="#5d3a24" />
-        </>
-      )}
-      {k === "river" && (
-        <>
-          <path d="M6 30 Q20 0 34 30 Z" fill="#ffccbc" stroke="#e64a19" strokeWidth="1.5" />
-          {[12, 16, 20, 24, 28].map((x) => <line key={x} x1="20" y1="30" x2={x} y2="12" stroke="#e64a19" strokeWidth="1.2" />)}
-        </>
-      )}
-      {k === "cave" && <polygon points="20,3 31,15 26,37 14,37 9,15" fill="#ce93d8" stroke="#8e24aa" strokeWidth="2" />}
-      {k === "mountain" && (
-        <>
-          <path d="M8 36 Q14 10 32 4 Q26 24 8 36 Z" fill="#a1887f" />
-          <line x1="8" y1="36" x2="30" y2="6" stroke="#5d4037" strokeWidth="2" />
-        </>
-      )}
-    </svg>
-  );
+  return <img src={`/game-art/keepsake-${KEEPSAKE_ART[k]}.png`} alt={PATHS[k].find} width={size} height={size} draggable={false} style={{ display: "block", objectFit: "contain" }} />;
 }
 
 function WordPic({ word, size }: { word: string; size: number }) {
@@ -472,7 +410,7 @@ export default function AdventureGame() {
           {BUDDIES.map((b) => (
             <button key={b} className="wq-buddy" onClick={() => { setBuddy(b); sfx("tap"); }}
               style={{ border: buddy === b ? "3px solid #7fd4ff" : "2px solid rgba(255,255,255,.2)", background: buddy === b ? "rgba(127,212,255,.2)" : "rgba(255,255,255,.06)" }}>
-              <BuddyFace who={b} />{b}
+              <BuddyFace who={b} size={86} />{b}
             </button>
           ))}
         </div>

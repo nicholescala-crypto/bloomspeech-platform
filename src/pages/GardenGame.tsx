@@ -59,47 +59,7 @@ function goBack() {
 
 // ── Drawings ───────────────────────────────────────────────────────
 function PlantView({ p, size = 70 }: { p: Plant; size?: number }) {
-  return (
-    <svg viewBox="0 0 60 70" width={size} height={size * 1.17} style={{ display: "block", overflow: "visible" }}>
-      {p !== "carrot" && p !== "pumpkin" && p !== "strawberry" && <path d="M30 68 V30" stroke="#43a047" strokeWidth="4" />}
-      {p !== "carrot" && p !== "pumpkin" && <ellipse cx="20" cy="52" rx="9" ry="4" fill="#66bb6a" transform="rotate(-25 20 52)" />}
-      {p === "sunflower" && (
-        <>
-          {Array.from({ length: 12 }, (_, i) => <ellipse key={i} cx="30" cy="12" rx="4" ry="9" fill="#fdd835" transform={`rotate(${i * 30} 30 22)`} />)}
-          <circle cx="30" cy="22" r="8" fill="#6d4c41" />
-        </>
-      )}
-      {p === "tulip" && <path d="M20 18 Q20 34 30 34 Q40 34 40 18 L35 24 L30 14 L25 24 Z" fill="#ec407a" />}
-      {p === "daisy" && (
-        <>
-          {Array.from({ length: 10 }, (_, i) => <ellipse key={i} cx="30" cy="16" rx="3.5" ry="8" fill="#fff" stroke="#e0e0e0" transform={`rotate(${i * 36} 30 24)`} />)}
-          <circle cx="30" cy="24" r="5" fill="#fbc02d" />
-        </>
-      )}
-      {p === "carrot" && (
-        <>
-          <path d="M30 40 Q22 22 18 14 M30 40 Q30 20 30 10 M30 40 Q38 22 42 14" stroke="#43a047" strokeWidth="4" fill="none" strokeLinecap="round" />
-          <path d="M22 40 H38 L31 68 Z" fill="#fb8c00" />
-        </>
-      )}
-      {p === "strawberry" && (
-        <>
-          <path d="M30 68 Q24 50 30 36" stroke="#43a047" strokeWidth="3" fill="none" />
-          <path d="M18 40 Q30 30 42 40 Q40 60 30 64 Q20 60 18 40 Z" fill="#e53935" />
-          <path d="M22 38 L30 32 L38 38 L30 36 Z" fill="#43a047" />
-          {[[25, 46], [33, 46], [29, 54], [24, 54], [35, 54]].map(([x, y], i) => <circle key={i} cx={x} cy={y} r="1.2" fill="#ffeb3b" />)}
-        </>
-      )}
-      {p === "pumpkin" && (
-        <>
-          <path d="M30 40 Q34 32 38 30" stroke="#5d4037" strokeWidth="3" fill="none" />
-          <ellipse cx="30" cy="54" rx="22" ry="15" fill="#fb8c00" />
-          <path d="M30 40 V68 M18 44 Q16 54 18 64 M42 44 Q44 54 42 64" stroke="#e65100" strokeWidth="2" fill="none" />
-          <ellipse cx="44" cy="38" rx="8" ry="4" fill="#66bb6a" />
-        </>
-      )}
-    </svg>
-  );
+  return <img src={`/game-art/plant-${p}.png`} alt={PLANTS[p].label} width={size} height={size} draggable={false} style={{ display: "block", objectFit: "contain" }} />;
 }
 
 const Sprout = () => (
@@ -115,43 +75,15 @@ function Packet({ p }: { p: Plant }) {
     <svg viewBox="0 0 60 80" width="58" height="77">
       <rect x="4" y="4" width="52" height="72" rx="6" fill={PLANTS[p].packet} stroke="rgba(0,0,0,.2)" strokeWidth="2" />
       <rect x="10" y="12" width="40" height="44" rx="6" fill="#fff" />
-      <g transform="translate(12 10) scale(0.6)"><PlantView p={p} size={60} /></g>
+      <image href={`/game-art/plant-${p}.png`} x="10" y="12" width="40" height="44" />
     </svg>
   );
 }
 
-const Butterfly = () => (
-  <svg viewBox="0 0 50 40" width="46" height="37">
-    <ellipse cx="15" cy="15" rx="12" ry="10" fill="#ba68c8" /><ellipse cx="35" cy="15" rx="12" ry="10" fill="#ba68c8" />
-    <ellipse cx="17" cy="30" rx="8" ry="7" fill="#ce93d8" /><ellipse cx="33" cy="30" rx="8" ry="7" fill="#ce93d8" />
-    <rect x="23" y="8" width="4" height="28" rx="2" fill="#4a148c" />
-  </svg>
-);
-const Bee = () => (
-  <svg viewBox="0 0 50 40" width="46" height="37">
-    <ellipse cx="20" cy="10" rx="9" ry="6" fill="#e3f2fd" opacity=".9" /><ellipse cx="32" cy="10" rx="9" ry="6" fill="#e3f2fd" opacity=".9" />
-    <ellipse cx="25" cy="25" rx="16" ry="11" fill="#fdd835" />
-    <path d="M18 15 V35 M26 14 V36" stroke="#212121" strokeWidth="4" />
-    <circle cx="38" cy="22" r="2" fill="#212121" />
-  </svg>
-);
-const Bunny = () => (
-  <svg viewBox="0 0 60 60" width="62" height="62">
-    <ellipse cx="22" cy="12" rx="5" ry="14" fill="#eeeeee" /><ellipse cx="38" cy="12" rx="5" ry="14" fill="#eeeeee" />
-    <circle cx="30" cy="32" r="14" fill="#f5f5f5" /><ellipse cx="30" cy="50" rx="16" ry="10" fill="#f5f5f5" />
-    <circle cx="25" cy="30" r="2" fill="#333" /><circle cx="35" cy="30" r="2" fill="#333" />
-    <circle cx="30" cy="35" r="2" fill="#f48fb1" />
-  </svg>
-);
-const Bird = () => (
-  <svg viewBox="0 0 60 44" width="56" height="41">
-    <ellipse cx="28" cy="26" rx="20" ry="14" fill="#ef5350" />
-    <circle cx="44" cy="16" r="10" fill="#ef5350" />
-    <circle cx="47" cy="14" r="2.5" fill="#222" />
-    <polygon points="54,16 62,18 54,21" fill="#ffa000" />
-    <path d="M14 22 Q24 4 34 22" fill="#c62828" />
-  </svg>
-);
+const Butterfly = () => <img src="/game-art/visitor-butterfly.png" alt="butterfly" width={70} height={70} draggable={false} style={{ display: "block" }} />;
+const Bee = () => <img src="/game-art/visitor-bee.png" alt="bee" width={70} height={70} draggable={false} style={{ display: "block" }} />;
+const Bunny = () => <img src="/game-art/visitor-bunny.png" alt="bunny" width={70} height={70} draggable={false} style={{ display: "block" }} />;
+const Bird = () => <img src="/game-art/visitor-bird.png" alt="bird" width={70} height={70} draggable={false} style={{ display: "block" }} />;
 
 function WordPic({ word, size }: { word: string; size: number }) {
   const [missing, setMissing] = useState(false);
