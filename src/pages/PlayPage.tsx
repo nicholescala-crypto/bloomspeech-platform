@@ -299,6 +299,7 @@ export default function PlayPage() {
   const [phase, setPhase] = useState<"intro" | "say" | "build" | "choose" | "trip" | "done">("intro");
   const [index, setIndex] = useState(0);
   const [secondTry, setSecondTry] = useState(false);
+  const [extraTries, setExtraTries] = useState(0); // first "Try again" taps: real tries too
   const [results, setResults] = useState<{ word: string; r: Result }[]>([]);
   const [design, setDesign] = useState<Design>({ stickers: [] });
   const [choices, setChoices] = useState(() => nextChoices(0));
@@ -364,6 +365,7 @@ export default function PlayPage() {
     if (!secondTry) {
       sfx("tap");
       setSecondTry(true);
+      setExtraTries((n) => n + 1);
       speak(current);
     } else {
       sfx("pop");
@@ -435,6 +437,7 @@ export default function PlayPage() {
     setIndex(0);
     setResults([]);
     setSecondTry(false);
+    setExtraTries(0);
     setDesign({ stickers: [] });
     setChoices(nextChoices(0));
     setPhase("say");
@@ -538,7 +541,7 @@ export default function PlayPage() {
         {phase === "done" && (
           <div className="sp-card sp-pop" style={{ marginTop: 14 }}>
             <h1 className="sp-say">{info.landed}</h1>
-            <p className="sp-sum">You practiced {results.length} times. {got} sounded right.</p>
+            <p className="sp-sum">You practiced {results.length + extraTries} times. Grown-up marked {got} of {results.length + extraTries} tries correct.</p>
             {needMore.length > 0 && (
               <div className="sp-more"><strong>Keep practicing:</strong> {needMore.join(", ")}</div>
             )}

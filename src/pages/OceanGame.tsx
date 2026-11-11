@@ -244,7 +244,7 @@ export default function OceanGame() {
   }
   function gotIt() { sfx("success"); addTry("got"); }
   function tryAgain() {
-    if (!secondTry) { sfx("tap"); setSecondTry(true); speak(curWord); }
+    if (!secondTry) { sfx("tap"); setSecondTry(true); setLog((l) => [...l, { word: curWord, t: "effort" }]); speak(curWord); }
     else { sfx("pop"); addTry("effort"); }
   }
 
@@ -335,7 +335,7 @@ export default function OceanGame() {
           <h1 style={{ margin: "4px 0" }}>{msg}</h1>
           <p style={{ fontWeight: 800, margin: "0 0 8px" }}>You filled your reef with {placed.length} sea friends.</p>
           {sea}
-          <p style={{ fontWeight: 800, fontSize: 18, margin: "10px 0 6px" }}>You practiced {log.length} times. {got} sounded right.</p>
+          <p style={{ fontWeight: 800, fontSize: 18, margin: "10px 0 6px" }}>You practiced {log.length} times. Grown-up marked {got} of {log.length} tries correct.</p>
           {hard.length > 0 && <p style={{ background: "#fff4e0", borderRadius: 12, padding: 10, margin: "8px 0" }}><b>Keep practicing:</b> {hard.join(", ")}</p>}
           <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
             <button className="oc-big oc-go" onClick={start}>Build a new reef</button>

@@ -296,7 +296,7 @@ export default function SpaceGame() {
   }
   function gotIt() { sfx("success"); addTry("got"); }
   function tryAgain() {
-    if (!secondTry) { sfx("tap"); setSecondTry(true); speak(curWord); }
+    if (!secondTry) { sfx("tap"); setSecondTry(true); setLog((l) => [...l, { word: curWord, t: "effort" }]); speak(curWord); }
     else { sfx("pop"); addTry("effort"); }
   }
 
@@ -375,7 +375,7 @@ export default function SpaceGame() {
             ))}
           </div>
           <p style={{ fontWeight: 800, margin: "4px 0" }}>Plus {gems} space gem{gems === 1 ? "" : "s"} and {fuel} star fuel.</p>
-          <p style={{ fontWeight: 800, fontSize: 18, margin: "6px 0" }}>You practiced {log.length} times. {got} sounded right.</p>
+          <p style={{ fontWeight: 800, fontSize: 18, margin: "6px 0" }}>You practiced {log.length} times. Grown-up marked {got} of {log.length} tries correct.</p>
           {hard.length > 0 && <p style={{ background: "#fff4e0", borderRadius: 12, padding: 10, margin: "8px 0" }}><b>Keep practicing:</b> {hard.join(", ")}</p>}
           <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
             <button className="sm-big sm-go" onClick={() => setPhase("intro")}>New mission</button>

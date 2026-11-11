@@ -339,7 +339,7 @@ export default function AdventureGame() {
   }
   function gotIt() { sfx("success"); addTry("got"); }
   function tryAgain() {
-    if (!secondTry) { sfx("tap"); setSecondTry(true); speak(curWord); }
+    if (!secondTry) { sfx("tap"); setSecondTry(true); setLog((l) => [...l, { word: curWord, t: "effort" }]); speak(curWord); }
     else { sfx("pop"); addTry("effort"); }
   }
 
@@ -454,7 +454,7 @@ export default function AdventureGame() {
               <div key={i} style={{ textAlign: "center", fontWeight: 800, fontSize: 13 }}><Keepsake k={k} size={56} /><div>{PATHS[k].find}</div></div>
             )) : <div style={{ fontWeight: 800 }}>A big gold coin!</div>}
           </div>
-          <p style={{ fontWeight: 800, fontSize: 18, margin: "6px 0" }}>You practiced {log.length} times. {got} sounded right.</p>
+          <p style={{ fontWeight: 800, fontSize: 18, margin: "6px 0" }}>You practiced {log.length} times. Grown-up marked {got} of {log.length} tries correct.</p>
           {hard.length > 0 && <p style={{ background: "#fff4e0", borderRadius: 12, padding: 10, margin: "8px 0" }}><b>Keep practicing:</b> {hard.join(", ")}</p>}
           <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
             <button className="wq-big wq-go" onClick={() => setPhase("intro")}>Go on a new quest</button>

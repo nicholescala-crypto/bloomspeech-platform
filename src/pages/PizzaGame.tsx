@@ -250,7 +250,7 @@ export default function PizzaGame() {
   }
   function gotIt() { sfx("success"); addTry("got"); }
   function tryAgain() {
-    if (!secondTry) { sfx("tap"); setSecondTry(true); speak(curWord); }
+    if (!secondTry) { sfx("tap"); setSecondTry(true); setLog((l) => [...l, { word: curWord, t: "effort" }]); speak(curWord); }
     else { sfx("pop"); addTry("effort"); }
   }
 
@@ -294,7 +294,7 @@ export default function PizzaGame() {
       const used = new Set(pieces.map((p) => p.t));
       const fav = wish.every((w) => used.has(w));
       setServed((s) => [...s, { sauce, pieces, fav }]);
-      setCoins((c) => c + (fav ? 3 : 2));
+      setCoins((c) => c + 3);
       sfx("success");
       setPhase("served");
     }, 1800);
@@ -377,7 +377,7 @@ export default function PizzaGame() {
           <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", margin: "8px 0" }}>
             {served.map((s, i) => <Pizza key={i} sauce={s.sauce} pieces={s.pieces} size={110} baked />)}
           </div>
-          <p style={{ fontWeight: 800, fontSize: 18, margin: "6px 0" }}>You practiced {log.length} times. {got} sounded right.</p>
+          <p style={{ fontWeight: 800, fontSize: 18, margin: "6px 0" }}>You practiced {log.length} times. Grown-up marked {got} of {log.length} tries correct.</p>
           {hard.length > 0 && <p style={{ background: "#fff4e0", borderRadius: 12, padding: 10, margin: "8px 0" }}><b>Keep practicing:</b> {hard.join(", ")}</p>}
           <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
             <button className="pz-big pz-go" onClick={start}>Open the shop again</button>
@@ -396,7 +396,7 @@ export default function PizzaGame() {
         <div className="pz-card pz-pop">
           <div className="pz-bounce" style={{ display: "inline-block" }}><Customer c={cust} mood={last?.fav ? "love" : "wow"} size={110} /></div>
           <h2 style={{ margin: "6px 0" }}>{last?.fav ? `"My favorite! Thank you, chef!"` : `"Ooh, a surprise pizza! I love it!"`}</h2>
-          <p style={{ fontWeight: 800 }}>{cust.name} gave you {last?.fav ? 3 : 2} coins.</p>
+          <p style={{ fontWeight: 800 }}>{cust.name} gave you 3 coins.</p>
           <div style={{ display: "flex", justifyContent: "center" }}><Pizza sauce={last?.sauce} pieces={last?.pieces || []} size={170} baked /></div>
           <button className="pz-big pz-go" style={{ marginTop: 12 }} onClick={nextCustomer}>
             {pizzaIdx + 1 < orders.length ? "Next customer" : "Close the shop"}
