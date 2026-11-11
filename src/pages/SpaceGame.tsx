@@ -94,14 +94,17 @@ const Fuel = ({ size = 64 }: { size?: number }) => (
   </svg>
 );
 
+const SHIP_ART: Record<string, string> = { "#e53935": "red", "#1e88e5": "blue", "#43a047": "green" };
 function Ship({ color, size = 90, beam = false }: { color: string; size?: number; beam?: boolean }) {
   return (
-    <svg viewBox="0 0 120 110" width={size} height={size * 0.92} style={{ overflow: "visible" }}>
-      {beam && <polygon points="40,52 80,52 104,140 16,140" fill="rgba(255,255,140,.55)" className="sm-beam" />}
-      <ellipse cx="60" cy="26" rx="24" ry="20" fill="#b3e5fc" stroke="#90a4ae" strokeWidth="3" />
-      <ellipse cx="60" cy="44" rx="56" ry="16" fill={color} />
-      {[20, 40, 60, 80, 100].map((x) => <circle key={x} cx={x} cy="46" r="4" fill="#fff59d" />)}
-    </svg>
+    <div style={{ position: "relative", width: size, height: size * 0.92 }}>
+      {beam && (
+        <svg viewBox="0 0 120 110" width={size} height={size * 0.92} style={{ position: "absolute", inset: 0, overflow: "visible" }}>
+          <polygon points="40,62 80,62 104,150 16,150" fill="rgba(255,255,140,.55)" className="sm-beam" />
+        </svg>
+      )}
+      <img src={`/game-art/ship-${SHIP_ART[color] || "blue"}.png`} alt="spaceship" width={size} height={size * 0.92} draggable={false} style={{ position: "relative", display: "block", objectFit: "contain" }} />
+    </div>
   );
 }
 

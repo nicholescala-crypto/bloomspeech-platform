@@ -91,55 +91,27 @@ function WordPic({ word, size }: { word: string; size: number }) {
 }
 
 const Monster = ({ chomp }: { chomp: boolean }) => (
-  <svg viewBox="0 0 140 130" width="210" height="195" className={chomp ? "wq-chomp" : "wq-wiggle"}>
-    <path d="M20 120 Q10 40 70 20 Q130 40 120 120 Z" fill="#8e5cd9" />
-    <circle cx="50" cy="50" r="13" fill="#fff" /><circle cx="90" cy="50" r="13" fill="#fff" />
-    <circle cx="52" cy="52" r="6" fill="#222" /><circle cx="88" cy="52" r="6" fill="#222" />
-    {chomp ? <path d="M40 88 Q70 100 100 88" stroke="#3b1f66" strokeWidth="6" fill="none" strokeLinecap="round" />
-      : <ellipse cx="70" cy="90" rx="30" ry="18" fill="#3b1f66" />}
-    {!chomp && <><rect x="52" y="73" width="9" height="9" fill="#fff" /><rect x="79" y="73" width="9" height="9" fill="#fff" /></>}
-  </svg>
+  <div className={chomp ? "wq-chomp" : "wq-wiggle"}><img src={`/game-art/toy-monster-${chomp ? "happy" : "open"}.png`} alt="monster" width={200} height={200} draggable={false} style={{ display: "block", objectFit: "contain" }} /></div>
 );
 
 const Mound = () => (
-  <svg viewBox="0 0 160 100" width="240" height="150">
-    <path d="M5 98 Q30 20 80 14 Q130 20 155 98 Z" fill="#8a5a32" />
-    <path d="M30 70 Q50 60 60 72 M90 50 Q105 44 118 58 M70 86 Q82 80 92 88" stroke="#6b4423" strokeWidth="4" fill="none" />
-  </svg>
+  <img src="/game-art/toy-dirt.png" alt="" width={210} height={210} draggable={false} style={{ display: "block", objectFit: "contain" }} />
 );
 
 const Shovel = () => (
-  <svg viewBox="0 0 60 120" width="78" height="156">
-    <rect x="26" y="6" width="8" height="70" rx="3" fill="#8d6e63" />
-    <rect x="16" y="2" width="28" height="10" rx="5" fill="#6d4c41" />
-    <path d="M12 74 L48 74 L44 108 Q30 120 16 108 Z" fill="#90a4ae" stroke="#607d8b" strokeWidth="2" />
-  </svg>
+  <img src="/game-art/toy-shovel.png" alt="" width={130} height={130} draggable={false} style={{ display: "block", objectFit: "contain" }} />
 );
 
 const Hoop = ({ swish }: { swish: boolean }) => (
-  <svg viewBox="0 0 140 130" width="210" height="195">
-    <rect x="20" y="4" width="100" height="70" rx="6" fill="#fff" stroke="#90a4ae" strokeWidth="4" />
-    <rect x="50" y="26" width="40" height="30" fill="none" stroke="#ef5350" strokeWidth="4" />
-    <ellipse cx="70" cy="78" rx="30" ry="7" fill="none" stroke="#f57c00" strokeWidth="6" />
-    <path d="M42 80 L52 118 M58 82 L62 120 M82 82 L78 120 M98 80 L88 118" stroke="#cfd8dc" strokeWidth="3" className={swish ? "wq-net" : ""} />
-  </svg>
+  <div className={swish ? "wq-net" : ""}><img src="/game-art/toy-hoop.png" alt="" width={200} height={200} draggable={false} style={{ display: "block", objectFit: "contain" }} /></div>
 );
 
 const FuelCan = () => (
-  <svg viewBox="0 0 70 90" width="90" height="116">
-    <rect x="8" y="18" width="54" height="68" rx="8" fill="#e53935" />
-    <rect x="22" y="4" width="26" height="14" rx="4" fill="#b71c1c" />
-    <path d="M20 42 L35 30 L50 42 L35 70 Z" fill="#ffeb3b" />
-  </svg>
+  <img src="/game-art/toy-fuel.png" alt="" width={110} height={110} draggable={false} style={{ display: "block", objectFit: "contain" }} />
 );
 
 const SmallRocket = ({ go }: { go: boolean }) => (
-  <svg viewBox="0 0 100 170" width="124" height="210" className={go ? "wq-launch" : "wq-wiggle"} style={{ overflow: "visible" }}>
-    {go && <path d="M36 140 Q50 200 64 140 Z" fill="#ff7043" />}
-    <path d="M30 60 L10 140 L32 130 Z" fill="#37474f" /><path d="M70 60 L90 140 L68 130 Z" fill="#37474f" />
-    <path d="M50 4 Q82 40 74 140 L26 140 Q18 40 50 4 Z" fill="#eceff1" stroke="#90a4ae" strokeWidth="3" />
-    <circle cx="50" cy="70" r="14" fill="#b3e5fc" stroke="#90a4ae" strokeWidth="3" />
-  </svg>
+  <div className={go ? "wq-launch" : "wq-wiggle"}><img src="/game-art/toy-rocket.png" alt="" width={200} height={200} draggable={false} style={{ display: "block", objectFit: "contain" }} /></div>
 );
 
 const TOYS: Record<ToyKey, { title: string; hint: string; done: string }> = {
