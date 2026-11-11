@@ -1,348 +1,429 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
-import { WORD_EMOJIS, DEFAULT_WORD_EMOJI } from "../games/data/wordEmojis";
+import { useEffect, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { speak, sfx, unlockAudio } from "../games/audio";
 
-type Phase = "intro" | "playing" | "bedDone" | "won";
+// ---------------------------------------------------------------------------
+// Bloom Garden: SAY IT TWICE (grown-up taps Got it / Try again; every try
+// counts), then the child CHOOSES a seed packet and DRAGS it into any empty
+// spot in the garden, where it sprouts and grows. At the end, visitors come
+// depending on what was planted (butterflies, a bee, a bunny, a bird), so
+// every garden ends differently.
+// ---------------------------------------------------------------------------
 
-const BED_SIZE = 4;            // flowers per garden bed
-const TARGET_FLOWERS = 24;     // minimum total flowers for a full garden
+type Phase = "intro" | "say" | "plant" | "done";
+type Try = "got" | "effort";
+type Plant = "sunflower" | "tulip" | "daisy" | "carrot" | "strawberry" | "pumpkin";
 
-const SEASONS = [
-  { name: "Spring", emoji: "🌷", sky: "#e2f5e8", soil: "#8a5a34", petal: "#ff8ab5" },
-  { name: "Summer", emoji: "☀️", sky: "#fff3d4", soil: "#7a4e2c", petal: "#ffab33" },
-  { name: "Autumn", emoji: "🍂", sky: "#ffe7cf", soil: "#6f4626", petal: "#e0602f" },
-  { name: "Winter", emoji: "❄️", sky: "#e6f2ff", soil: "#5f4a3a", petal: "#7fb3ff" },
-  { name: "Rainbow", emoji: "🌈", sky: "#f3e8ff", soil: "#6b4a30", petal: "#b06bff" },
-  { name: "Meadow", emoji: "🌼", sky: "#eaf7d8", soil: "#6f5a2c", petal: "#ffd23a" },
-];
-
-const GARDENERS = [
-  { name: "Daisy", emoji: "👩‍🌾" },
-  { name: "Sunny", emoji: "🧑‍🌾" },
-  { name: "Buzz", emoji: "🐝" },
-  { name: "Hoppy", emoji: "🐰" },
-];
-
-const CSS = `
-@keyframes gg-bob {0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-@keyframes gg-grow {0%{transform:scale(0) translateY(16px);opacity:0}60%{opacity:1}80%{transform:scale(1.12) translateY(0)}100%{transform:scale(1) translateY(0);opacity:1}}
-@keyframes gg-sway {0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
-@keyframes gg-water {0%{transform:rotate(0)}40%{transform:rotate(-32deg)}100%{transform:rotate(-32deg)}}
-@keyframes gg-drop {0%{transform:translateY(-6px);opacity:0}30%{opacity:1}100%{transform:translateY(26px);opacity:0}}
-@keyframes gg-spark {0%{transform:translateY(0) scale(0);opacity:1}100%{transform:translateY(-46px) scale(1.2);opacity:0}}
-@keyframes gg-pulse {0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
-`;
+const SAYS_PER_WORD = 2;
+const PLOTS = 12;
+const PLANTS: Record<Plant, { label: string; packet: string }> = {
+  sunflower: { label: "Sunflower", packet: "#fbc02d" },
+  tulip: { label: "Tulip", packet: "#ec407a" },
+  daisy: { label: "Daisy", packet: "#90caf9" },
+  carrot: { label: "Carrot", packet: "#fb8c00" },
+  strawberry: { label: "Strawberry", packet: "#e53935" },
+  pumpkin: { label: "Pumpkin", packet: "#8d6e63" },
+};
 
 function readParams() {
   const p = new URLSearchParams(window.location.search);
-  const sound = (p.get("sound") || "").replace(/\//g, "").toLowerCase();
-  const wordsParam = (p.get("words") || "").split(",").map((w) => w.trim()).filter(Boolean);
-  return { sound, wordsParam };
+  const sound = (p.get("sound") || p.get("targetSound") || "").replace(/\//g, "").toLowerCase();
+  const words = (p.get("words") || "").split(",").map((w) => w.trim()).filter(Boolean);
+  return { sound, words };
 }
 
 function shuffle<T>(a: T[]): T[] {
-  return [...a].sort(() => Math.random() - 0.5);
+  const b = a.slice();
+  for (let i = b.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [b[i], b[j]] = [b[j], b[i]];
+  }
+  return b;
 }
 
-function buildBeds(words: string[]): string[][] {
-  let padded = shuffle(words);
-  while (padded.length < TARGET_FLOWERS && words.length) padded = padded.concat(shuffle(words));
-  const out: string[][] = [];
-  for (let i = 0; i < padded.length; i += BED_SIZE) out.push(padded.slice(i, i + BED_SIZE));
-  return out;
+function buildQueue(words: string[]): string[] {
+  const total = Math.max(10, Math.min(PLOTS, words.length * 2));
+  const q: string[] = [];
+  while (q.length < total) {
+    let round = shuffle(words);
+    if (q.length && round[0] === q[q.length - 1] && round.length > 1) round = [...round.slice(1), round[0]];
+    q.push(...round);
+  }
+  return q.slice(0, total);
 }
 
-function WordImage({ word, size }: { word: string; size: number }) {
-  const [err, setErr] = useState(false);
-  useEffect(() => setErr(false), [word]);
-  if (err) return <span style={{ fontSize: size * 0.82, lineHeight: 1 }}>{WORD_EMOJIS[word.toLowerCase()] || DEFAULT_WORD_EMOJI}</span>;
-  return <img src={`/Images/${word}.png`} alt={word} onError={() => setErr(true)} style={{ width: size, height: size, objectFit: "cover", borderRadius: "50%" }} />;
+function goBack() {
+  if (window.history.length > 1) window.history.back();
+  else window.location.href = "/";
 }
 
-function Flower({ word, petal, size = 62, animate = false }: { word: string; petal: string; size?: number; animate?: boolean }) {
+// ── Drawings ───────────────────────────────────────────────────────
+function PlantView({ p, size = 70 }: { p: Plant; size?: number }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", animation: animate ? "gg-grow .8s ease-out" : "gg-sway 3s ease-in-out infinite", transformOrigin: "bottom center" }}>
-      <div style={{ position: "relative", width: size, height: size }}>
-        {[0, 72, 144, 216, 288].map((a) => (
-          <span key={a} style={{ position: "absolute", top: "50%", left: "50%", width: size * 0.52, height: size * 0.52, borderRadius: "50%", background: petal, transform: `translate(-50%,-50%) rotate(${a}deg) translateY(-${size * 0.3}px)` }} />
-        ))}
-        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: size * 0.66, height: size * 0.66, borderRadius: "50%", overflow: "hidden", border: "2px solid #fff", background: "#fff", zIndex: 2, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <WordImage word={word} size={size * 0.62} />
-        </div>
+    <svg viewBox="0 0 60 70" width={size} height={size * 1.17} style={{ display: "block", overflow: "visible" }}>
+      {p !== "carrot" && p !== "pumpkin" && p !== "strawberry" && <path d="M30 68 V30" stroke="#43a047" strokeWidth="4" />}
+      {p !== "carrot" && p !== "pumpkin" && <ellipse cx="20" cy="52" rx="9" ry="4" fill="#66bb6a" transform="rotate(-25 20 52)" />}
+      {p === "sunflower" && (
+        <>
+          {Array.from({ length: 12 }, (_, i) => <ellipse key={i} cx="30" cy="12" rx="4" ry="9" fill="#fdd835" transform={`rotate(${i * 30} 30 22)`} />)}
+          <circle cx="30" cy="22" r="8" fill="#6d4c41" />
+        </>
+      )}
+      {p === "tulip" && <path d="M20 18 Q20 34 30 34 Q40 34 40 18 L35 24 L30 14 L25 24 Z" fill="#ec407a" />}
+      {p === "daisy" && (
+        <>
+          {Array.from({ length: 10 }, (_, i) => <ellipse key={i} cx="30" cy="16" rx="3.5" ry="8" fill="#fff" stroke="#e0e0e0" transform={`rotate(${i * 36} 30 24)`} />)}
+          <circle cx="30" cy="24" r="5" fill="#fbc02d" />
+        </>
+      )}
+      {p === "carrot" && (
+        <>
+          <path d="M30 40 Q22 22 18 14 M30 40 Q30 20 30 10 M30 40 Q38 22 42 14" stroke="#43a047" strokeWidth="4" fill="none" strokeLinecap="round" />
+          <path d="M22 40 H38 L31 68 Z" fill="#fb8c00" />
+        </>
+      )}
+      {p === "strawberry" && (
+        <>
+          <path d="M30 68 Q24 50 30 36" stroke="#43a047" strokeWidth="3" fill="none" />
+          <path d="M18 40 Q30 30 42 40 Q40 60 30 64 Q20 60 18 40 Z" fill="#e53935" />
+          <path d="M22 38 L30 32 L38 38 L30 36 Z" fill="#43a047" />
+          {[[25, 46], [33, 46], [29, 54], [24, 54], [35, 54]].map(([x, y], i) => <circle key={i} cx={x} cy={y} r="1.2" fill="#ffeb3b" />)}
+        </>
+      )}
+      {p === "pumpkin" && (
+        <>
+          <path d="M30 40 Q34 32 38 30" stroke="#5d4037" strokeWidth="3" fill="none" />
+          <ellipse cx="30" cy="54" rx="22" ry="15" fill="#fb8c00" />
+          <path d="M30 40 V68 M18 44 Q16 54 18 64 M42 44 Q44 54 42 64" stroke="#e65100" strokeWidth="2" fill="none" />
+          <ellipse cx="44" cy="38" rx="8" ry="4" fill="#66bb6a" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+const Sprout = () => (
+  <svg viewBox="0 0 60 70" width="44" height="52" style={{ display: "block" }}>
+    <path d="M30 68 V48" stroke="#43a047" strokeWidth="3" />
+    <ellipse cx="23" cy="48" rx="7" ry="3.5" fill="#66bb6a" transform="rotate(-25 23 48)" />
+    <ellipse cx="37" cy="46" rx="7" ry="3.5" fill="#66bb6a" transform="rotate(25 37 46)" />
+  </svg>
+);
+
+function Packet({ p }: { p: Plant }) {
+  return (
+    <svg viewBox="0 0 60 80" width="58" height="77">
+      <rect x="4" y="4" width="52" height="72" rx="6" fill={PLANTS[p].packet} stroke="rgba(0,0,0,.2)" strokeWidth="2" />
+      <rect x="10" y="12" width="40" height="44" rx="6" fill="#fff" />
+      <g transform="translate(12 10) scale(0.6)"><PlantView p={p} size={60} /></g>
+    </svg>
+  );
+}
+
+const Butterfly = () => (
+  <svg viewBox="0 0 50 40" width="46" height="37">
+    <ellipse cx="15" cy="15" rx="12" ry="10" fill="#ba68c8" /><ellipse cx="35" cy="15" rx="12" ry="10" fill="#ba68c8" />
+    <ellipse cx="17" cy="30" rx="8" ry="7" fill="#ce93d8" /><ellipse cx="33" cy="30" rx="8" ry="7" fill="#ce93d8" />
+    <rect x="23" y="8" width="4" height="28" rx="2" fill="#4a148c" />
+  </svg>
+);
+const Bee = () => (
+  <svg viewBox="0 0 50 40" width="46" height="37">
+    <ellipse cx="20" cy="10" rx="9" ry="6" fill="#e3f2fd" opacity=".9" /><ellipse cx="32" cy="10" rx="9" ry="6" fill="#e3f2fd" opacity=".9" />
+    <ellipse cx="25" cy="25" rx="16" ry="11" fill="#fdd835" />
+    <path d="M18 15 V35 M26 14 V36" stroke="#212121" strokeWidth="4" />
+    <circle cx="38" cy="22" r="2" fill="#212121" />
+  </svg>
+);
+const Bunny = () => (
+  <svg viewBox="0 0 60 60" width="62" height="62">
+    <ellipse cx="22" cy="12" rx="5" ry="14" fill="#eeeeee" /><ellipse cx="38" cy="12" rx="5" ry="14" fill="#eeeeee" />
+    <circle cx="30" cy="32" r="14" fill="#f5f5f5" /><ellipse cx="30" cy="50" rx="16" ry="10" fill="#f5f5f5" />
+    <circle cx="25" cy="30" r="2" fill="#333" /><circle cx="35" cy="30" r="2" fill="#333" />
+    <circle cx="30" cy="35" r="2" fill="#f48fb1" />
+  </svg>
+);
+const Bird = () => (
+  <svg viewBox="0 0 60 44" width="56" height="41">
+    <ellipse cx="28" cy="26" rx="20" ry="14" fill="#ef5350" />
+    <circle cx="44" cy="16" r="10" fill="#ef5350" />
+    <circle cx="47" cy="14" r="2.5" fill="#222" />
+    <polygon points="54,16 62,18 54,21" fill="#ffa000" />
+    <path d="M14 22 Q24 4 34 22" fill="#c62828" />
+  </svg>
+);
+
+function WordPic({ word, size }: { word: string; size: number }) {
+  const [missing, setMissing] = useState(false);
+  if (missing)
+    return (
+      <div style={{ width: size, height: size, borderRadius: 16, background: "#fff4e0", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: size / 5, margin: "0 auto", color: "#2e4a1f" }}>
+        {word}
       </div>
-      <div style={{ width: 4, height: 24, background: "#3f9d4a" }} />
-      <div style={{ width: 20, height: 6, background: "#3f9d4a", borderRadius: 6, marginTop: -14, transform: "rotate(-20deg)" }} />
+    );
+  return <img src={`/Images/${word.toLowerCase()}.png`} alt={word} onError={() => setMissing(true)} draggable={false}
+    style={{ width: size, height: size, objectFit: "contain", borderRadius: 16, background: "#fff", display: "block", margin: "0 auto" }} />;
+}
+
+function Draggable({ children, onDrop, onTap, onMove }: {
+  children: ReactNode; onDrop: (x: number, y: number) => void; onTap: () => void; onMove?: (x: number, y: number) => void;
+}) {
+  const [off, setOff] = useState({ x: 0, y: 0 });
+  const [drag, setDrag] = useState<{ sx: number; sy: number } | null>(null);
+  function down(e: ReactPointerEvent<HTMLDivElement>) {
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* some browsers refuse; dragging still works */ }
+    setDrag({ sx: e.clientX, sy: e.clientY });
+  }
+  function move(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!drag) return;
+    setOff({ x: e.clientX - drag.sx, y: e.clientY - drag.sy });
+    onMove?.(e.clientX, e.clientY);
+  }
+  function up(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!drag) return;
+    const moved = Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 10;
+    setDrag(null);
+    setOff({ x: 0, y: 0 });
+    if (moved) onDrop(e.clientX, e.clientY);
+    else onTap();
+  }
+  return (
+    <div onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { setDrag(null); setOff({ x: 0, y: 0 }); }}
+      style={{ transform: `translate(${off.x}px, ${off.y}px)`, transition: drag ? "none" : "transform .25s", cursor: drag ? "grabbing" : "grab", touchAction: "none", userSelect: "none", position: "relative", zIndex: drag ? 20 : 1 }}>
+      {children}
     </div>
   );
 }
 
+const CSS = `
+.bg-page{min-height:100vh;font-family:'Nunito',system-ui,Arial,sans-serif;background:linear-gradient(#e8f5e9,#fffde7);color:#2e4a1f;padding:14px 14px 30px;box-sizing:border-box}
+.bg-wrap{max-width:740px;margin:0 auto}
+.bg-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.bg-chip{background:#fff;border:2px solid #c5e1a5;color:#33691e;font-weight:800;border-radius:12px;padding:8px 14px;cursor:pointer;font-family:inherit;font-size:15px}
+.bg-card{background:#fff;border-radius:22px;padding:14px;text-align:center;box-shadow:0 8px 24px rgba(51,105,30,.12)}
+.bg-big{border:none;border-radius:16px;padding:16px 12px;font-size:19px;font-weight:900;cursor:pointer;font-family:inherit;touch-action:manipulation}
+.bg-big:active{transform:scale(.97)}
+.bg-go{background:linear-gradient(135deg,#7cb342,#558b2f);color:#fff;width:100%}
+.bg-got{background:#27c06b;color:#fff;box-shadow:0 4px 0 #1b8a4c}
+.bg-try{background:#f5a623;color:#2e4a1f;box-shadow:0 4px 0 #b97a12}
+.bg-word{font-size:34px;font-weight:900;margin:6px 0 0}
+.bg-power{display:flex;justify-content:center;gap:10px;margin:8px 0}
+.bg-cell{width:36px;height:36px;border-radius:50%;border:3px solid #dcedc8;background:#f9fbe7}
+.bg-cell.got{background:#27c06b;border-color:#1b8a4c}.bg-cell.effort{background:#f5a623;border-color:#b97a12}
+.bg-garden{position:relative;border-radius:18px;padding:40px 12px 12px;background:linear-gradient(#b3e5fc 0,#b3e5fc 34px,#8d6e63 34px)}
+.bg-plots{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.bg-plot{height:92px;border-radius:12px;background:#6d4c41;box-shadow:inset 0 -6px 0 rgba(0,0,0,.15);display:flex;align-items:flex-end;justify-content:center;padding-bottom:4px}
+.bg-plot.hot{outline:3px dashed #fff59d}
+.bg-plot.full{background:#795548}
+.bg-grow{animation:bgGrow .7s ease-out}
+@keyframes bgGrow{from{transform:scaleY(.2);transform-origin:50% 100%;opacity:.4}to{transform:scaleY(1);opacity:1}}
+.bg-packets{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
+.bg-pk{background:#f9fbe7;border:3px solid #dcedc8;border-radius:16px;padding:6px;display:flex;flex-direction:column;align-items:center;font-weight:800;font-size:14px}
+.bg-sun{position:absolute;right:14px;top:4px;width:26px;height:26px;border-radius:50%;background:#fdd835;box-shadow:0 0 12px #fff176}
+.bg-visit{position:absolute;animation:bgFly 3s ease-in-out infinite alternate}
+@keyframes bgFly{from{transform:translate(0,0)}to{transform:translate(30px,-14px)}}
+.bg-hop{position:absolute;animation:bgHop 1s ease-in-out infinite}
+@keyframes bgHop{0%,100%{transform:translateY(0)}50%{transform:translateY(-14px)}}
+@media (max-width:560px){.bg-plots{grid-template-columns:repeat(4,1fr)}.bg-plot{height:78px}}
+`;
+
 export default function GardenGame() {
-  const params = useMemo(readParams, []);
+  const [{ sound, words }] = useState(readParams);
   const [phase, setPhase] = useState<Phase>("intro");
-  const [gardener, setGardener] = useState(0);
-  const [beds, setBeds] = useState<string[][]>([]);
-  const [bedIdx, setBedIdx] = useState(0);
-  const [plotIdx, setPlotIdx] = useState(0);
-  const [stars, setStars] = useState(0);
-  const [tries, setTries] = useState(0);
-  const [fx, setFx] = useState(false);
+  const [queue, setQueue] = useState<string[]>([]);
+  const [idx, setIdx] = useState(0);
+  const [power, setPower] = useState<Try[]>([]);
+  const [secondTry, setSecondTry] = useState(false);
+  const [log, setLog] = useState<{ word: string; t: Try }[]>([]);
+  const [plots, setPlots] = useState<(Plant | null)[]>(Array(PLOTS).fill(null));
+  const [fresh, setFresh] = useState<number | null>(null);
+  const [grown, setGrown] = useState<number[]>([]);
+  const [choices, setChoices] = useState<Plant[]>([]);
+  const [hot, setHot] = useState<number | null>(null);
+  const plotRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const busy = useRef(false);
 
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
-  const [micError, setMicError] = useState<string | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<BlobPart[]>([]);
+  const curWord = queue[idx] || "";
 
-  const soundLabel = params.sound ? `/${params.sound}/` : "";
-  const bed = beds[bedIdx] || [];
-  const curWord = bed[plotIdx] || "";
-  const totalFlowers = beds.reduce((n, b) => n + b.length, 0);
-  const grown = beds.slice(0, bedIdx).reduce((n, b) => n + b.length, 0) + plotIdx;
-  const season = SEASONS[bedIdx % SEASONS.length];
-  const cur = GARDENERS[gardener];
+  useEffect(() => {
+    if (phase === "say" && curWord && power.length === 0 && !secondTry) speak(curWord);
+  }, [phase, curWord]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function start() {
     unlockAudio();
-    setBeds(buildBeds(params.wordsParam));
-    setBedIdx(0); setPlotIdx(0); setStars(0); setTries(0); setFx(false);
-    setRecordingUrl(null);
-    setPhase("playing");
+    sfx("tap");
+    setQueue(buildQueue(words));
+    busy.current = false;
+    setIdx(0); setPower([]); setSecondTry(false); setLog([]); setPlots(Array(PLOTS).fill(null)); setGrown([]); setFresh(null);
+    setPhase("say");
   }
 
-  function advance(got: boolean) {
-    setTries((t) => t + 1);
-    if (got) setStars((s) => s + 1);
-    setRecordingUrl(null); setFx(false);
-    if (plotIdx + 1 < bed.length) setPlotIdx(plotIdx + 1);
-    else if (bedIdx + 1 < beds.length) setPhase("bedDone");
-    else setPhase("won");
-  }
-
-  function play() {
-    if (fx) return;
-    sfx("success");
-    setFx(true);
-    window.setTimeout(() => advance(true), 1000);
-  }
-
-  useEffect(() => { if (phase === "playing" && curWord) speak(curWord); }, [curWord, phase]);
-  useEffect(() => { if (phase === "won") sfx("win"); else if (phase === "bedDone") sfx("level"); }, [phase]);
-
-  function nextBed() { setBedIdx(bedIdx + 1); setPlotIdx(0); setPhase("playing"); }
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (phase !== "playing" || fx) return;
-      if (e.key === "g" || e.key === "G" || e.key === " ") { e.preventDefault(); play(); }
-      else if (e.key === "n" || e.key === "N") advance(false);
+  function addTry(t: Try) {
+    const next = [...power, t];
+    setLog((l) => [...l, { word: curWord, t }]);
+    setPower(next);
+    setSecondTry(false);
+    if (next.length >= SAYS_PER_WORD) {
+      setChoices(shuffle(Object.keys(PLANTS) as Plant[]).slice(0, 3));
+      window.setTimeout(() => setPhase("plant"), 450);
+    } else {
+      window.setTimeout(() => speak(curWord), 350);
     }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
-
-  async function startRec() {
-    setMicError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const r = new MediaRecorder(stream);
-      chunksRef.current = [];
-      r.ondataavailable = (e) => e.data.size > 0 && chunksRef.current.push(e.data);
-      r.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        if (recordingUrl) URL.revokeObjectURL(recordingUrl);
-        setRecordingUrl(URL.createObjectURL(blob));
-        stream.getTracks().forEach((t) => t.stop());
-      };
-      r.start(); recorderRef.current = r; setIsRecording(true);
-    } catch { setMicError("Mic is off — you can still tap to score."); }
   }
-  function stopRec() { const r = recorderRef.current; if (r && r.state !== "inactive") r.stop(); setIsRecording(false); }
-  function playBack() { if (recordingUrl) new Audio(recordingUrl).play().catch(() => {}); }
+  function gotIt() { sfx("success"); addTry("got"); }
+  function tryAgain() {
+    if (!secondTry) { sfx("tap"); setSecondTry(true); speak(curWord); }
+    else { sfx("pop"); addTry("effort"); }
+  }
 
-  const page: CSSProperties = { minHeight: "100vh", fontFamily: "'Nunito',system-ui,Arial,sans-serif", background: "linear-gradient(180deg,#d8f0ff,#eafbe8 55%,#d7f0cf)", color: "#2f4a2f", padding: "16px 16px 40px" };
-  const wrap: CSSProperties = { maxWidth: 720, margin: "0 auto" };
-  const card: CSSProperties = { background: "#fff", border: "2px solid #d6ecc9", borderRadius: 20, padding: 18, marginBottom: 14, boxShadow: "0 8px 24px rgba(80,140,60,0.12)" };
+  function plotAt(x: number, y: number) {
+    for (let i = 0; i < PLOTS; i++) {
+      const r = plotRefs.current[i]?.getBoundingClientRect();
+      if (r && x >= r.left && x <= r.right && y >= r.top - 20 && y <= r.bottom && !plots[i]) return i;
+    }
+    return null;
+  }
 
-  // ── NO HOMEWORK ────────────────────────────────────────────────
-  if (!params.wordsParam.length) {
+  function plantAt(p: Plant, i: number | null) {
+    if (busy.current) return; // one seed per word, even on a double tap
+    const spot = i ?? plots.findIndex((x) => !x);
+    if (spot < 0) return;
+    busy.current = true;
+    const next = plots.slice();
+    next[spot] = p;
+    setPlots(next);
+    setFresh(spot);
+    setPower([]);
+    setHot(null);
+    sfx("pop");
+    window.setTimeout(() => { setGrown((g) => [...g, spot]); sfx("success"); }, 700);
+    window.setTimeout(() => {
+      busy.current = false;
+      if (idx + 1 < queue.length) { setIdx(idx + 1); setPhase("say"); }
+      else { sfx("win"); setPhase("done"); }
+    }, 1400);
+  }
+
+  if (!words.length) {
     return (
-      <div style={{ ...page, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ ...wrap, textAlign: "center" }}>
-          <div style={{ fontSize: 60 }}>🌱</div>
-          <h1 style={{ fontSize: 24, margin: "10px 0" }}>No seeds loaded</h1>
-          <p style={{ maxWidth: 340, margin: "0 auto 18px", opacity: 0.8, lineHeight: 1.5 }}>Open your child’s practice card and tap a game there — it will grow the exact words their therapist assigned.</p>
-          <button onClick={() => { window.location.href = "/parent"; }} style={{ padding: "14px 28px", borderRadius: 16, border: "none", background: "linear-gradient(135deg,#5bbf5b,#3f9d4a)", color: "white", fontSize: 16, fontWeight: 900, cursor: "pointer" }}>
-            ← Back to my child’s card
-          </button>
+      <div className="bg-page" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <style>{CSS}</style>
+        <div className="bg-wrap" style={{ textAlign: "center" }}>
+          <h1>No homework loaded</h1>
+          <p>Open your child's homework and tap Bloom Garden there.</p>
+          <button className="bg-big bg-go" style={{ maxWidth: 320 }} onClick={goBack}>Back to homework</button>
         </div>
       </div>
     );
   }
 
-  // ── INTRO ──────────────────────────────────────────────────────
+  const planted = plots.filter(Boolean) as Plant[];
+  const count = (p: Plant) => planted.filter((x) => x === p).length;
+  const flowers = count("tulip") + count("daisy") + count("sunflower");
+  const visitors: { key: string; el: ReactNode; msg: string; style: React.CSSProperties; cls: string }[] = [];
+  if (phase === "done") {
+    if (flowers >= 2) visitors.push({ key: "bf", el: <Butterfly />, msg: "Butterflies came for your flowers!", style: { left: "18%", top: 30 }, cls: "bg-visit" });
+    if (count("sunflower")) visitors.push({ key: "bee", el: <Bee />, msg: "A bee is buzzing on your sunflower!", style: { left: "55%", top: 44 }, cls: "bg-visit" });
+    if (count("carrot") || count("pumpkin")) visitors.push({ key: "bun", el: <Bunny />, msg: "A bunny hopped in for a snack!", style: { left: "2%", bottom: 6 }, cls: "bg-hop" });
+    if (count("strawberry")) visitors.push({ key: "bird", el: <Bird />, msg: "A bird wants your strawberries!", style: { right: "18%", top: 26 }, cls: "bg-visit" });
+    if (!visitors.length) visitors.push({ key: "bf", el: <Butterfly />, msg: "A butterfly came to visit!", style: { left: "40%", top: 30 }, cls: "bg-visit" });
+  }
+
+  const garden = (
+    <div className="bg-garden">
+      <div className="bg-sun" />
+      <div className="bg-plots">
+        {plots.map((p, i) => (
+          <div key={i} ref={(el) => { plotRefs.current[i] = el; }} className={`bg-plot ${p ? "full" : ""} ${hot === i ? "hot" : ""}`}
+>
+            {p && (grown.includes(i)
+              ? <div className={fresh === i ? "bg-grow" : ""}><PlantView p={p} size={66} /></div>
+              : <div className="bg-grow"><Sprout /></div>)}
+          </div>
+        ))}
+      </div>
+      {visitors.map((v) => <div key={v.key} className={v.cls} style={v.style}>{v.el}</div>)}
+    </div>
+  );
+
   if (phase === "intro") {
     return (
-      <div style={page}>
-        <style>{CSS}</style>
-        <div style={{ ...wrap, textAlign: "center" }}>
-          <a href="/parent" style={{ color: "#3f9d4a", fontWeight: 800, textDecoration: "none", fontSize: 14, display: "inline-block", marginBottom: 8 }}>← Back</a>
-          <div style={{ fontSize: 58, animation: "gg-bob 2.6s ease-in-out infinite" }}>🌻</div>
-          <h1 style={{ fontSize: 30, margin: "6px 0" }}>Bloom Garden</h1>
-          <p style={{ opacity: 0.8, margin: "0 0 16px" }}>Say each word to water a seed and grow a flower. Fill the whole garden! {soundLabel && <>Sound: <b>{soundLabel}</b></>}</p>
-          <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#3f9d4a", marginBottom: 8 }}>Pick your gardener</div>
-          <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginBottom: 22 }}>
-            {GARDENERS.map((g, i) => (
-              <button key={g.name} onClick={() => setGardener(i)} style={{ width: 110, padding: "14px 8px", borderRadius: 16, cursor: "pointer", background: gardener === i ? "#d6f0cf" : "#fff", border: gardener === i ? "2px solid #3f9d4a" : "2px solid #d6ecc9", color: "#2f4a2f" }}>
-                <div style={{ fontSize: 38 }}>{g.emoji}</div>
-                <div style={{ fontSize: 13, fontWeight: 800, marginTop: 4 }}>{g.name}</div>
-              </button>
-            ))}
+      <div className="bg-page"><style>{CSS}</style><div className="bg-wrap">
+        <button className="bg-chip" onClick={goBack}>Back</button>
+        <div className="bg-card" style={{ marginTop: 12 }}>
+          <div style={{ display: "flex", justifyContent: "center", gap: 6 }}>
+            <PlantView p="sunflower" size={50} /><PlantView p="tulip" size={50} /><PlantView p="carrot" size={50} /><PlantView p="strawberry" size={50} />
           </div>
-          <button onClick={start} style={{ padding: "16px 44px", borderRadius: 20, border: "none", cursor: "pointer", background: "linear-gradient(135deg,#5bbf5b,#3f9d4a)", color: "white", fontSize: 22, fontWeight: 900, boxShadow: "0 10px 30px rgba(63,157,74,0.35)" }}>
-            🌱 Start planting!
-          </button>
-          <p style={{ opacity: 0.45, fontSize: 12, marginTop: 14 }}>{params.wordsParam.length} words · ~{Math.max(TARGET_FLOWERS, params.wordsParam.length)} flowers · Press G = Got it, N = Not yet</p>
+          <h1 style={{ margin: "6px 0 4px" }}>Bloom Garden</h1>
+          <p style={{ fontWeight: 700, margin: 0 }}>Say each word 2 times, then plant a seed anywhere in your garden.</p>
+          <p style={{ fontWeight: 700, margin: "4px 0 12px" }}>What you plant decides who comes to visit!</p>
+          <button className="bg-big bg-go" onClick={start}>Start planting</button>
+          <p style={{ fontSize: 14, fontWeight: 700, color: "#558b2f" }}>Grown-up: after each try, tap Got it or Try again.</p>
         </div>
-      </div>
+      </div></div>
     );
   }
 
-  // ── BED DONE (season finished) ─────────────────────────────────
-  if (phase === "bedDone") {
-    const next = SEASONS[(bedIdx + 1) % SEASONS.length];
+  if (phase === "done") {
+    const got = log.filter((x) => x.t === "got").length;
+    const hard = Array.from(new Set(log.filter((x) => x.t === "effort").map((x) => x.word)));
     return (
-      <div style={{ ...page, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <style>{CSS}</style>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 84, animation: "gg-bob 2.2s ease-in-out infinite" }}>{season.emoji}🌼</div>
-          <h2 style={{ margin: "8px 0", color: "#3f9d4a" }}>{season.name} bed in full bloom!</h2>
-          <p style={{ opacity: 0.8 }}>{grown} flowers grown. Next up: {next.name} {next.emoji}.</p>
-          <button onClick={nextBed} style={{ marginTop: 14, padding: "14px 30px", borderRadius: 16, border: "none", background: "linear-gradient(135deg,#5bbf5b,#3f9d4a)", color: "white", fontSize: 17, fontWeight: 900, cursor: "pointer" }}>Plant more 🌱</button>
+      <div className="bg-page"><style>{CSS}</style><div className="bg-wrap">
+        <div className="bg-card">
+          <h1 style={{ margin: "4px 0" }}>Your garden is all grown!</h1>
+          {visitors.map((v) => <p key={v.key} style={{ fontWeight: 800, margin: "2px 0" }}>{v.msg}</p>)}
+          <div style={{ margin: "10px 0" }}>{garden}</div>
+          <p style={{ fontWeight: 800, fontSize: 18, margin: "6px 0" }}>You practiced {log.length} times. {got} sounded right.</p>
+          {hard.length > 0 && <p style={{ background: "#fff4e0", borderRadius: 12, padding: 10, margin: "8px 0" }}><b>Keep practicing:</b> {hard.join(", ")}</p>}
+          <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+            <button className="bg-big bg-go" onClick={start}>Plant a new garden</button>
+            <button className="bg-big" style={{ background: "#f1f8e9", color: "#33691e" }} onClick={goBack}>Back to homework</button>
+          </div>
         </div>
-      </div>
+      </div></div>
     );
   }
 
-  // ── WON ────────────────────────────────────────────────────────
-  if (phase === "won") {
-    const acc = tries ? Math.round((stars / tries) * 100) : 0;
-    return (
-      <div style={page}>
-        <style>{CSS}</style>
-        <div style={{ ...wrap, textAlign: "center", paddingTop: 30 }}>
-          <div style={{ fontSize: 40 }}>🌸🌻🌷🌼🌹</div>
-          <h1 style={{ fontSize: 30, margin: "8px 0" }}>Garden in full bloom!</h1>
-          <p style={{ opacity: 0.8 }}>{cur.name} {cur.emoji} grew {totalFlowers} flowers across every season.</p>
-          <div style={{ ...card, display: "inline-block", padding: "16px 28px", marginTop: 8 }}>
-            <div style={{ fontSize: 30, fontWeight: 900 }}>⭐ {stars} / {totalFlowers}</div>
-            <div style={{ opacity: 0.75, marginTop: 4 }}>Accuracy {acc}% · {totalFlowers} flowers</div>
-          </div>
-          <div style={{ marginTop: 20, display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-            <button onClick={start} style={{ padding: "14px 28px", borderRadius: 16, border: "none", background: "linear-gradient(135deg,#5bbf5b,#3f9d4a)", color: "white", fontSize: 16, fontWeight: 900, cursor: "pointer" }}>🌱 Grow again</button>
-            <button onClick={() => { window.location.href = "/parent"; }} style={{ padding: "14px 28px", borderRadius: 16, border: "2px solid #a9d99b", background: "transparent", color: "#2f4a2f", fontSize: 16, fontWeight: 900, cursor: "pointer" }}>Done</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── PLAYING ────────────────────────────────────────────────────
-  const bloomPct = totalFlowers ? Math.round((grown / totalFlowers) * 100) : 0;
   return (
-    <div style={page}>
-      <style>{CSS}</style>
-      <div style={wrap}>
-        {/* top bar */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <button onClick={() => { window.location.href = "/parent"; }} style={{ background: "#fff", border: "2px solid #d6ecc9", borderRadius: 10, padding: "6px 12px", color: "#3f9d4a", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>← Exit</button>
-          {soundLabel && <div style={{ fontWeight: 800, color: "#3f9d4a" }}>Sound {soundLabel}</div>}
-          <div style={{ background: "#fff", border: "2px solid #d6ecc9", borderRadius: 12, padding: "6px 12px", fontWeight: 900 }}>⭐ {stars}</div>
-        </div>
-
-        {/* bed progress */}
-        <div style={{ ...card, padding: 14 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
-            {beds.map((_, i) => (
-              <span key={i} style={{ fontSize: i === bedIdx ? 22 : 16, opacity: i > bedIdx ? 0.4 : 1 }}>{i < bedIdx ? "🌸" : i === bedIdx ? "🌱" : "•"}</span>
-            ))}
-          </div>
-          <div style={{ textAlign: "center", marginTop: 6, fontWeight: 900, fontSize: 15, color: "#3f9d4a" }}>{season.emoji} {season.name} bed · Flower {grown + 1} of {totalFlowers}</div>
-          <div style={{ height: 8, background: "#e6f2df", borderRadius: 6, marginTop: 8, overflow: "hidden" }}>
-            <div style={{ height: "100%", width: bloomPct + "%", background: "linear-gradient(90deg,#a7e37f,#3f9d4a)", transition: "width .4s" }} />
-          </div>
-        </div>
-
-        {/* garden scene */}
-        <div style={{ ...card, position: "relative", overflow: "hidden", padding: 0 }}>
-          <div style={{ padding: "14px 14px 4px", fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#3f9d4a", textAlign: "center" }}>
-            💧 Water the seed · say <span style={{ color: "#163b3f" }}>{curWord}</span>{soundLabel && <> with {soundLabel}</>}
-          </div>
-
-          {/* sky + bed */}
-          <div style={{ position: "relative", background: season.sky, minHeight: 180, display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 6, padding: "18px 10px 0" }}>
-            {bed.map((w, i) => {
-              const state = i < plotIdx ? "grown" : i === plotIdx ? "current" : "empty";
-              return (
-                <div key={i} style={{ flex: 1, maxWidth: 84, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", minHeight: 150 }}>
-                  {state === "grown" && <Flower word={w} petal={season.petal} />}
-                  {state === "current" && !fx && (
-                    <div onClick={play} style={{ cursor: "pointer", textAlign: "center", animation: "gg-pulse 1.8s ease-in-out infinite" }}>
-                      <div style={{ fontSize: 30 }}>🌱</div>
-                    </div>
-                  )}
-                  {state === "current" && fx && (
-                    <div style={{ position: "relative", textAlign: "center" }}>
-                      <span style={{ position: "absolute", top: -34, left: "52%", fontSize: 26, animation: "gg-water .9s ease-in-out" }}>🪣</span>
-                      <span style={{ position: "absolute", top: -8, left: "46%", fontSize: 14, animation: "gg-drop .8s ease-in infinite" }}>💧</span>
-                      {Array.from({ length: 4 }).map((_, s) => (
-                        <span key={s} style={{ position: "absolute", top: -10, left: `${30 + s * 14}%`, fontSize: 14, animation: `gg-spark .8s ease-out ${s * 0.06}s forwards` }}>✨</span>
-                      ))}
-                      <Flower word={w} petal={season.petal} animate />
-                    </div>
-                  )}
-                  {state === "empty" && <div style={{ width: 16, height: 16, borderRadius: "50%", background: "rgba(0,0,0,0.18)" }} />}
-                </div>
-              );
-            })}
-            {/* soil */}
-            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 26, background: season.soil }} />
-          </div>
-
-          <div style={{ padding: "10px 14px 14px" }}>
-            {/* current word big */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
-              <div style={{ width: 56, height: 56, borderRadius: "50%", overflow: "hidden", border: "2px solid #d6ecc9", background: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <WordImage word={curWord} size={54} />
-              </div>
-              <div style={{ fontSize: 38, fontWeight: 900, lineHeight: 1, textTransform: "lowercase" }}>{curWord}</div>
-            </div>
-            <div style={{ fontSize: 12, color: "#7c9a6f", fontWeight: 700, marginTop: 4, textAlign: "center" }}>Flower {plotIdx + 1} of {bed.length} · this bed</div>
-
-            {/* record (optional) */}
-            <div style={{ marginTop: 12, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-              <button onClick={() => speak(curWord)} style={{ background: "#eef7e8", border: "2px solid #d6ecc9", color: "#3f9d4a", borderRadius: 12, padding: "8px 14px", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>🔊 Hear it</button>
-              {!isRecording ? (
-                <button onClick={startRec} style={{ background: "#eef7e8", border: "2px solid #d6ecc9", color: "#3f9d4a", borderRadius: 12, padding: "8px 14px", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>🎤 Record</button>
-              ) : (
-                <button onClick={stopRec} style={{ background: "#ef4444", border: "none", color: "#fff", borderRadius: 12, padding: "8px 14px", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>⏹ Stop</button>
-              )}
-              {recordingUrl && <button onClick={playBack} style={{ background: "#eef7e8", border: "2px solid #d6ecc9", color: "#3f9d4a", borderRadius: 12, padding: "8px 14px", fontWeight: 800, cursor: "pointer", fontSize: 13 }}>▶ Play back</button>}
-            </div>
-            {micError && <div style={{ fontSize: 12, color: "#c0392b", marginTop: 6, textAlign: "center" }}>{micError}</div>}
-          </div>
-        </div>
-
-        {/* score buttons */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <button onClick={play} disabled={fx} style={{ padding: "18px 12px", borderRadius: 16, border: "none", background: "linear-gradient(135deg,#27c06b,#1ea65a)", color: "white", fontSize: 18, fontWeight: 900, cursor: fx ? "default" : "pointer", opacity: fx ? 0.7 : 1 }}>
-            💧 Water it! <span style={{ opacity: 0.7, fontSize: 13 }}>(G)</span>
-          </button>
-          <button onClick={() => { sfx("fail"); advance(false); }} disabled={fx} style={{ padding: "18px 12px", borderRadius: 16, border: "none", background: "#e3efdc", color: "#5a7150", fontSize: 18, fontWeight: 900, cursor: fx ? "default" : "pointer" }}>
-            Not yet ▶ <span style={{ opacity: 0.7, fontSize: 13 }}>(N)</span>
-          </button>
-        </div>
+    <div className="bg-page"><style>{CSS}</style><div className="bg-wrap">
+      <div className="bg-row">
+        <button className="bg-chip" onClick={goBack}>Back</button>
+        {sound && <div style={{ fontWeight: 900 }}>Sound: <span style={{ color: "#558b2f" }}>/{sound}/</span></div>}
+        <div style={{ fontWeight: 900 }}>{idx + 1} of {queue.length}</div>
       </div>
-    </div>
+      <div className="bg-card">
+        {phase === "say" ? (
+          <>
+            <div style={{ fontSize: 14, fontWeight: 900, color: "#558b2f", textTransform: "uppercase", letterSpacing: 1 }}>Say it 2 times!</div>
+            <div style={{ marginTop: 6 }}><WordPic key={curWord} word={curWord} size={150} /></div>
+            <div className="bg-word">{curWord}</div>
+            <div className="bg-power">
+              {Array.from({ length: SAYS_PER_WORD }, (_, i) => <span key={i} className={`bg-cell ${power[i] || ""}`} />)}
+            </div>
+            <div style={{ color: "#c26a00", fontWeight: 800, minHeight: 22 }}>{secondTry ? "One more try!" : ""}</div>
+            <button className="bg-chip" style={{ marginBottom: 10 }} onClick={() => speak(curWord)}>Hear it</button>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <button className="bg-big bg-got" onClick={gotIt}>Got it</button>
+              <button className="bg-big bg-try" onClick={tryAgain}>Try again</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <h2 style={{ margin: "0 0 2px" }}>Pick a seed and plant it!</h2>
+            <div style={{ fontWeight: 700, color: "#558b2f" }}>Drag a seed packet to any empty spot. Or tap it.</div>
+            <div className="bg-packets">
+              {choices.map((p) => (
+                <Draggable key={p} onTap={() => plantAt(p, null)}
+                  onMove={(x, y) => setHot(plotAt(x, y))}
+                  onDrop={(x, y) => { const i = plotAt(x, y); setHot(null); if (i !== null) plantAt(p, i); }}>
+                  <div className="bg-pk"><Packet p={p} />{PLANTS[p].label}</div>
+                </Draggable>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+      <div style={{ marginTop: 12 }}>{garden}</div>
+    </div></div>
   );
 }

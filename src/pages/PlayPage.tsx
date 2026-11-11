@@ -45,7 +45,7 @@ function buildQueue(words: string[]): string[] {
 }
 
 function goBack() {
-  if (document.referrer && new URL(document.referrer).origin === window.location.origin) {
+  if (window.history.length > 1) {
     window.history.back();
   } else {
     window.location.href = "/";
@@ -403,7 +403,7 @@ export default function PlayPage() {
   }
 
   function onOptDown(e: ReactPointerEvent<HTMLButtonElement>, opt: Option) {
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* some browsers refuse; dragging still works */ }
     setDrag({ opt, x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY });
   }
   function onOptMove(e: ReactPointerEvent<HTMLButtonElement>) {

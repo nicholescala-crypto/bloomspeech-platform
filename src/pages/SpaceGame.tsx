@@ -76,7 +76,7 @@ function newAlien(used: string[]): AlienLook {
 }
 
 function goBack() {
-  if (document.referrer && new URL(document.referrer).origin === window.location.origin) window.history.back();
+  if (window.history.length > 1) window.history.back();
   else window.location.href = "/";
 }
 
@@ -173,7 +173,7 @@ function Search({ planet, shipColor, find, onDone }: {
   }
   function down(e: ReactPointerEvent<HTMLDivElement>) {
     if (chosen !== null) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* some browsers refuse; dragging still works */ }
     setDrag({ sx: e.clientX - off.x, sy: e.clientY - off.y });
   }
   function move(e: ReactPointerEvent<HTMLDivElement>) {

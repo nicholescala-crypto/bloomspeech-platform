@@ -74,7 +74,7 @@ function scatter(t: Topping, cx: number, cy: number): Piece[] {
 }
 
 function goBack() {
-  if (document.referrer && new URL(document.referrer).origin === window.location.origin) window.history.back();
+  if (window.history.length > 1) window.history.back();
   else window.location.href = "/";
 }
 
@@ -146,7 +146,7 @@ function Draggable({ children, onDrop, onTap, disabled = false }: {
   const [drag, setDrag] = useState<{ sx: number; sy: number } | null>(null);
   function down(e: ReactPointerEvent<HTMLDivElement>) {
     if (disabled) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* some browsers refuse; dragging still works */ }
     setDrag({ sx: e.clientX, sy: e.clientY });
   }
   function move(e: ReactPointerEvent<HTMLDivElement>) {
@@ -218,6 +218,7 @@ export default function PizzaGame() {
   const [served, setServed] = useState<{ sauce?: Sauce; pieces: Piece[]; fav: boolean }[]>([]);
   const pizzaRef = useRef<HTMLDivElement>(null);
   const ovenRef = useRef<HTMLDivElement>(null);
+  const busy = useRef(false);
 
   const curWord = orders[pizzaIdx]?.[wordIdx] || "";
   const cust = CUSTOMERS[customerOrder[pizzaIdx] ?? 0];
@@ -269,6 +270,8 @@ export default function PizzaGame() {
   }
 
   function placeTopping(t: Topping, clientX?: number, clientY?: number) {
+    if (busy.current) return; // one topping per word, even on a double tap
+    busy.current = true;
     let cx = 100, cy = 100;
     const el = pizzaRef.current?.getBoundingClientRect();
     if (el && clientX !== undefined && clientY !== undefined) {
@@ -285,6 +288,7 @@ export default function PizzaGame() {
     setPieces((p) => [...p, ...add]);
     setPower([]);
     window.setTimeout(() => {
+      busy.current = false;
       if (wordIdx + 1 < WORDS_PER_PIZZA) { setWordIdx(wordIdx + 1); setPhase("say"); }
       else setPhase("oven");
     }, 600);

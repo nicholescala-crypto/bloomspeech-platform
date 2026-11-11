@@ -64,7 +64,7 @@ function makeChoices(): Block[] {
 }
 
 function goBack() {
-  if (document.referrer && new URL(document.referrer).origin === window.location.origin) window.history.back();
+  if (window.history.length > 1) window.history.back();
   else window.location.href = "/";
 }
 
@@ -150,7 +150,7 @@ function Draggable({ children, onDrop, onTap }: { children: ReactNode; onDrop: (
   const [off, setOff] = useState({ x: 0, y: 0 });
   const [drag, setDrag] = useState<{ sx: number; sy: number } | null>(null);
   function down(e: ReactPointerEvent<HTMLDivElement>) {
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* some browsers refuse; dragging still works */ }
     setDrag({ sx: e.clientX, sy: e.clientY });
   }
   function move(e: ReactPointerEvent<HTMLDivElement>) {
@@ -224,6 +224,7 @@ export default function TowerGame() {
   const [hot, setHot] = useState(false);
   const [stars] = useState(() => Array.from({ length: 30 }, () => ({ l: Math.random() * 100, t: Math.random() * 70 })));
   const stageRef = useRef<HTMLDivElement>(null);
+  const busy = useRef(false);
 
   const curWord = queue[idx] || "";
 
@@ -263,6 +264,8 @@ export default function TowerGame() {
   const topX = blocks.length ? blocks[blocks.length - 1].x : 0;
 
   function place(choice: Block, clientX?: number) {
+    if (busy.current) return; // one block per word, even on a double tap
+    busy.current = true;
     let x = topX;
     const r = stageRef.current?.getBoundingClientRect();
     if (r && clientX !== undefined) {
@@ -278,6 +281,7 @@ export default function TowerGame() {
     sfx("pop");
     if (Math.abs(lean(next)) > 22) { setWobble((w) => w + 1); window.setTimeout(() => sfx("fail"), 200); }
     window.setTimeout(() => {
+      busy.current = false;
       if (idx + 1 < queue.length) { setIdx(idx + 1); setPhase("say"); }
       else setPhase("top");
     }, 700);

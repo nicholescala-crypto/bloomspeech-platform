@@ -52,7 +52,7 @@ function buildCamps(words: string[]): string[][] {
 }
 
 function goBack() {
-  if (document.referrer && new URL(document.referrer).origin === window.location.origin) window.history.back();
+  if (window.history.length > 1) window.history.back();
   else window.location.href = "/";
 }
 
@@ -229,7 +229,7 @@ function DragToy({ toy, word, onDone }: { toy: ToyKey; word: string; onDone: () 
   }
   function down(e: ReactPointerEvent<HTMLDivElement>) {
     if (done) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* some browsers refuse; dragging still works */ }
     setDrag({ sx: e.clientX - off.x, sy: e.clientY - off.y });
     setNudge(false);
   }
