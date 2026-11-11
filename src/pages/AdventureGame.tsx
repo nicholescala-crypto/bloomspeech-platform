@@ -1,388 +1,569 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
-import { wordsForSound, WORD_BANK_SOUNDS } from "../games/data/wordBank";
-import { WORD_EMOJIS, DEFAULT_WORD_EMOJI } from "../games/data/wordEmojis";
+import { useEffect, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { speak, sfx, unlockAudio } from "../games/audio";
 
 // ---------------------------------------------------------------------------
-// Word Quest — a leveled adventure where every word is a different MINI-GAME.
-// Say the word to power the toy: pop a bubble, feed a monster, dig treasure,
-// launch a rocket. Travel a map of camps, earn badges + treasures.
-// Uses real photos (/Images/<word>.png, emoji fallback) + the big word bank.
+// Word Quest: the child and a buddy travel camp to camp.
+// For each word: SAY IT 3 TIMES (the grown-up taps Got it / Try again; every
+// try powers up), then it's the child's turn to PLAY: drag the picture to the
+// monster, drag the shovel to dig, drag the ball into the hoop, drag the fuel
+// to the rocket. After each camp the child CHOOSES a path, and each path finds
+// a different keepsake, so every trip ends with a different treasure.
 // ---------------------------------------------------------------------------
 
-type Phase = "intro" | "playing" | "levelDone" | "won";
+type Phase = "intro" | "say" | "toy" | "camp" | "won";
+type Try = "got" | "effort";
+type ToyKey = "monster" | "dig" | "hoop" | "fuel";
+type PathKey = "forest" | "river" | "cave" | "mountain";
 
-const WORDS_PER_LEVEL = 4;
-const MAX_LEVELS = 5;
-
-const COMPANIONS = [
-  { name: "Pip the Fox", emoji: "🦊" },
-  { name: "Bramble the Bear", emoji: "🐻" },
-  { name: "Luna the Owl", emoji: "🦉" },
-  { name: "Coco the Monkey", emoji: "🐵" },
-];
-const BADGES = ["🥾", "🏕️", "🧭", "⛰️", "🏔️"];
-
-const MINIS = [
-  { key: "bubble", icon: "🫧", title: "Bubble Pop", action: "Pop it!", reward: "✨", verb: "pop the bubble" },
-  { key: "monster", icon: "👾", title: "Feed the Monster", action: "Feed it!", reward: "🍬", verb: "feed the monster" },
-  { key: "dig", icon: "⛏️", title: "Treasure Dig", action: "Dig it up!", reward: "💎", verb: "dig up the treasure" },
-  { key: "rocket", icon: "🚀", title: "Blast Off", action: "Launch!", reward: "⭐", verb: "launch the rocket" },
-  { key: "fish", icon: "🎣", title: "Reel It In", action: "Reel it in!", reward: "🐟", verb: "reel in the catch" },
-  { key: "hoop", icon: "🏀", title: "Hoop Shot", action: "Shoot!", reward: "🏀", verb: "sink the basket" },
-  { key: "balloon", icon: "🎈", title: "Balloon Float", action: "Let it go!", reward: "🎈", verb: "float the balloon away" },
-  { key: "paint", icon: "🎨", title: "Paint Splash", action: "Splash!", reward: "🌈", verb: "splash the paint off" },
-] as const;
-
-const CSS = `
-@keyframes wq-bob {0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
-@keyframes wq-pop {0%{transform:scale(1);opacity:1}100%{transform:scale(1.7);opacity:0}}
-@keyframes wq-chomp {0%,100%{transform:scaleY(1)}40%{transform:scaleY(.62)}}
-@keyframes wq-flydown {0%{transform:translateY(0) scale(1);opacity:1}100%{transform:translateY(120px) scale(.25);opacity:0}}
-@keyframes wq-reveal {from{opacity:0;transform:scale(.7) rotate(-8deg)}to{opacity:1;transform:scale(1) rotate(0)}}
-@keyframes wq-launch {0%{transform:translateY(0)}25%{transform:translateY(6px)}100%{transform:translateY(-460px) scale(.5);opacity:0}}
-@keyframes wq-spark {0%{transform:translateY(0) scale(0);opacity:1}100%{transform:translateY(-70px) scale(1.3);opacity:0}}
-@keyframes wq-pulse {0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}
-@keyframes wq-shake {0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
-@keyframes wq-reel {0%{transform:translateY(0) rotate(0)}100%{transform:translateY(-250px) rotate(10deg);opacity:0}}
-@keyframes wq-hoop {0%{transform:translate(0,0) scale(1)}45%{transform:translate(34px,-150px) scale(.7)}100%{transform:translate(70px,30px) scale(.45);opacity:0}}
-@keyframes wq-float {0%{transform:translateY(0) translateX(0) scale(1)}100%{transform:translateY(-380px) translateX(34px) scale(.7);opacity:0}}
-`;
+const SAYS_PER_WORD = 3;
+const WORDS_PER_CAMP = 3;
+const CAMPS = 4;
 
 function readParams() {
   const p = new URLSearchParams(window.location.search);
-  const sound = (p.get("sound") || "").replace(/\//g, "").toLowerCase();
-  const pos = p.get("pos") || p.get("position") || "Mixed";
-  const wordsParam = (p.get("words") || "").split(",").map((w) => w.trim()).filter(Boolean);
-  return { sound, pos, wordsParam };
+  const sound = (p.get("sound") || p.get("targetSound") || "").replace(/\//g, "").toLowerCase();
+  const words = (p.get("words") || "").split(",").map((w) => w.trim()).filter(Boolean);
+  return { sound, words };
 }
-function buildWords(sound: string, pos: string): string[] {
-  const position = pos === "Mixed" ? undefined : pos;
-  const pool = wordsForSound(sound, position);
-  return [...new Set(pool)].sort(() => Math.random() - 0.5).slice(0, WORDS_PER_LEVEL * MAX_LEVELS);
+
+function shuffle<T>(a: T[]): T[] {
+  const b = a.slice();
+  for (let i = b.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [b[i], b[j]] = [b[j], b[i]];
+  }
+  return b;
 }
-function chunk<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+
+// Up to 4 camps of 3 words; short lists repeat so there is still a full trip.
+function buildCamps(words: string[]): string[][] {
+  const camps = Math.max(3, Math.min(CAMPS, Math.ceil(words.length / WORDS_PER_CAMP)));
+  const need = camps * WORDS_PER_CAMP;
+  const q: string[] = [];
+  while (q.length < need) {
+    let round = shuffle(words);
+    if (q.length && round[0] === q[q.length - 1] && round.length > 1) round = [...round.slice(1), round[0]];
+    q.push(...round);
+  }
+  const out: string[][] = [];
+  for (let i = 0; i < camps; i++) out.push(q.slice(i * WORDS_PER_CAMP, (i + 1) * WORDS_PER_CAMP));
   return out;
 }
 
-function WordImage({ word, size }: { word: string; size: number }) {
-  const [err, setErr] = useState(false);
-  useEffect(() => setErr(false), [word]);
-  if (err) return <span style={{ fontSize: size * 0.78, lineHeight: 1 }}>{WORD_EMOJIS[word.toLowerCase()] || DEFAULT_WORD_EMOJI}</span>;
-  return <img src={`/Images/${word}.png`} alt={word} onError={() => setErr(true)} style={{ width: size, height: size, objectFit: "contain", borderRadius: 14 }} />;
+function goBack() {
+  if (document.referrer && new URL(document.referrer).origin === window.location.origin) window.history.back();
+  else window.location.href = "/";
 }
 
-export default function AdventureGame() {
-  const params = useMemo(readParams, []);
-  const [phase, setPhase] = useState<Phase>("intro");
-  const [sound, setSound] = useState(params.sound && WORD_BANK_SOUNDS.includes(params.sound) ? params.sound : "r");
-  const [pos, setPos] = useState(params.pos);
-  const [companion, setCompanion] = useState(0);
+// ── Drawings ───────────────────────────────────────────────────────
+const BUDDIES = ["Fox", "Bear", "Owl", "Frog"] as const;
+type Buddy = (typeof BUDDIES)[number];
 
-  const [levels, setLevels] = useState<string[][]>([]);
-  const [level, setLevel] = useState(0);
-  const [wordIdx, setWordIdx] = useState(0);
-  const [stars, setStars] = useState(0);
-  const [tries, setTries] = useState(0);
-  const [fx, setFx] = useState(false); // success animation in progress
+function BuddyFace({ who, size = 56 }: { who: Buddy; size?: number }) {
+  return (
+    <svg viewBox="0 0 60 60" width={size} height={size}>
+      {who === "Fox" && (
+        <>
+          <polygon points="10,8 22,22 8,28" fill="#e8762d" />
+          <polygon points="50,8 38,22 52,28" fill="#e8762d" />
+          <circle cx="30" cy="34" r="20" fill="#f08a3c" />
+          <path d="M14 38 Q30 58 46 38 Q30 46 14 38 Z" fill="#fff" />
+          <circle cx="23" cy="30" r="3" fill="#222" /><circle cx="37" cy="30" r="3" fill="#222" />
+          <circle cx="30" cy="42" r="3" fill="#222" />
+        </>
+      )}
+      {who === "Bear" && (
+        <>
+          <circle cx="13" cy="15" r="8" fill="#8d5a3b" /><circle cx="47" cy="15" r="8" fill="#8d5a3b" />
+          <circle cx="30" cy="33" r="21" fill="#a0694a" />
+          <ellipse cx="30" cy="41" rx="10" ry="8" fill="#e3c0a0" />
+          <circle cx="22" cy="29" r="3" fill="#222" /><circle cx="38" cy="29" r="3" fill="#222" />
+          <ellipse cx="30" cy="38" rx="3.5" ry="2.5" fill="#222" />
+        </>
+      )}
+      {who === "Owl" && (
+        <>
+          <polygon points="12,10 20,20 10,22" fill="#7b6a58" /><polygon points="48,10 40,20 50,22" fill="#7b6a58" />
+          <ellipse cx="30" cy="34" rx="21" ry="22" fill="#8d7b67" />
+          <circle cx="21" cy="30" r="9" fill="#fff" /><circle cx="39" cy="30" r="9" fill="#fff" />
+          <circle cx="21" cy="30" r="4" fill="#222" /><circle cx="39" cy="30" r="4" fill="#222" />
+          <polygon points="30,36 26,41 34,41" fill="#f2a52b" />
+        </>
+      )}
+      {who === "Frog" && (
+        <>
+          <circle cx="18" cy="18" r="9" fill="#5cb85c" /><circle cx="42" cy="18" r="9" fill="#5cb85c" />
+          <circle cx="18" cy="17" r="4.5" fill="#fff" /><circle cx="42" cy="17" r="4.5" fill="#fff" />
+          <circle cx="18" cy="17" r="2.2" fill="#222" /><circle cx="42" cy="17" r="2.2" fill="#222" />
+          <ellipse cx="30" cy="36" rx="22" ry="17" fill="#6cc66c" />
+          <path d="M18 38 Q30 48 42 38" stroke="#2e7d32" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+        </>
+      )}
+    </svg>
+  );
+}
 
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
-  const [micError, setMicError] = useState<string | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<BlobPart[]>([]);
+const PATHS: Record<PathKey, { label: string; find: string; color: string }> = {
+  forest: { label: "Forest path", find: "a pinecone", color: "#2e7d32" },
+  river: { label: "River path", find: "a shiny shell", color: "#1e88e5" },
+  cave: { label: "Cave path", find: "a glowing crystal", color: "#6a1b9a" },
+  mountain: { label: "Mountain path", find: "an eagle feather", color: "#6d4c41" },
+};
 
-  function start() {
-    unlockAudio();
-    let words = params.wordsParam.length ? params.wordsParam.slice(0, WORDS_PER_LEVEL * MAX_LEVELS) : buildWords(sound, pos);
-    if (!words.length) words = ["star", "sun", "rain", "rope"];
-    setLevels(chunk(words, WORDS_PER_LEVEL));
-    setLevel(0); setWordIdx(0); setStars(0); setTries(0); setRecordingUrl(null); setFx(false);
-    setPhase("playing");
+function Keepsake({ k, size = 46 }: { k: PathKey; size?: number }) {
+  return (
+    <svg viewBox="0 0 40 40" width={size} height={size}>
+      {k === "forest" && (
+        <>
+          <ellipse cx="20" cy="22" rx="10" ry="14" fill="#8d5a3b" />
+          {[12, 18, 24, 30].map((y) => <path key={y} d={`M11 ${y} Q20 ${y + 5} 29 ${y}`} stroke="#5d3a24" strokeWidth="2" fill="none" />)}
+          <rect x="18" y="4" width="4" height="6" fill="#5d3a24" />
+        </>
+      )}
+      {k === "river" && (
+        <>
+          <path d="M6 30 Q20 0 34 30 Z" fill="#ffccbc" stroke="#e64a19" strokeWidth="1.5" />
+          {[12, 16, 20, 24, 28].map((x) => <line key={x} x1="20" y1="30" x2={x} y2="12" stroke="#e64a19" strokeWidth="1.2" />)}
+        </>
+      )}
+      {k === "cave" && <polygon points="20,3 31,15 26,37 14,37 9,15" fill="#ce93d8" stroke="#8e24aa" strokeWidth="2" />}
+      {k === "mountain" && (
+        <>
+          <path d="M8 36 Q14 10 32 4 Q26 24 8 36 Z" fill="#a1887f" />
+          <line x1="8" y1="36" x2="30" y2="6" stroke="#5d4037" strokeWidth="2" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+function WordPic({ word, size }: { word: string; size: number }) {
+  const [missing, setMissing] = useState(false);
+  if (missing)
+    return (
+      <div style={{ width: size, height: size, borderRadius: 14, background: "#fff4e0", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: size / 5, color: "#13314f" }}>
+        {word}
+      </div>
+    );
+  return (
+    <img src={`/Images/${word.toLowerCase()}.png`} alt={word} onError={() => setMissing(true)} draggable={false}
+      style={{ width: size, height: size, objectFit: "contain", borderRadius: 14, background: "#fff", pointerEvents: "none" }} />
+  );
+}
+
+const Monster = ({ chomp }: { chomp: boolean }) => (
+  <svg viewBox="0 0 140 130" width="210" height="195" className={chomp ? "wq-chomp" : "wq-wiggle"}>
+    <path d="M20 120 Q10 40 70 20 Q130 40 120 120 Z" fill="#8e5cd9" />
+    <circle cx="50" cy="50" r="13" fill="#fff" /><circle cx="90" cy="50" r="13" fill="#fff" />
+    <circle cx="52" cy="52" r="6" fill="#222" /><circle cx="88" cy="52" r="6" fill="#222" />
+    {chomp ? <path d="M40 88 Q70 100 100 88" stroke="#3b1f66" strokeWidth="6" fill="none" strokeLinecap="round" />
+      : <ellipse cx="70" cy="90" rx="30" ry="18" fill="#3b1f66" />}
+    {!chomp && <><rect x="52" y="73" width="9" height="9" fill="#fff" /><rect x="79" y="73" width="9" height="9" fill="#fff" /></>}
+  </svg>
+);
+
+const Mound = () => (
+  <svg viewBox="0 0 160 100" width="240" height="150">
+    <path d="M5 98 Q30 20 80 14 Q130 20 155 98 Z" fill="#8a5a32" />
+    <path d="M30 70 Q50 60 60 72 M90 50 Q105 44 118 58 M70 86 Q82 80 92 88" stroke="#6b4423" strokeWidth="4" fill="none" />
+  </svg>
+);
+
+const Shovel = () => (
+  <svg viewBox="0 0 60 120" width="78" height="156">
+    <rect x="26" y="6" width="8" height="70" rx="3" fill="#8d6e63" />
+    <rect x="16" y="2" width="28" height="10" rx="5" fill="#6d4c41" />
+    <path d="M12 74 L48 74 L44 108 Q30 120 16 108 Z" fill="#90a4ae" stroke="#607d8b" strokeWidth="2" />
+  </svg>
+);
+
+const Hoop = ({ swish }: { swish: boolean }) => (
+  <svg viewBox="0 0 140 130" width="210" height="195">
+    <rect x="20" y="4" width="100" height="70" rx="6" fill="#fff" stroke="#90a4ae" strokeWidth="4" />
+    <rect x="50" y="26" width="40" height="30" fill="none" stroke="#ef5350" strokeWidth="4" />
+    <ellipse cx="70" cy="78" rx="30" ry="7" fill="none" stroke="#f57c00" strokeWidth="6" />
+    <path d="M42 80 L52 118 M58 82 L62 120 M82 82 L78 120 M98 80 L88 118" stroke="#cfd8dc" strokeWidth="3" className={swish ? "wq-net" : ""} />
+  </svg>
+);
+
+const FuelCan = () => (
+  <svg viewBox="0 0 70 90" width="90" height="116">
+    <rect x="8" y="18" width="54" height="68" rx="8" fill="#e53935" />
+    <rect x="22" y="4" width="26" height="14" rx="4" fill="#b71c1c" />
+    <path d="M20 42 L35 30 L50 42 L35 70 Z" fill="#ffeb3b" />
+  </svg>
+);
+
+const SmallRocket = ({ go }: { go: boolean }) => (
+  <svg viewBox="0 0 100 170" width="124" height="210" className={go ? "wq-launch" : "wq-wiggle"} style={{ overflow: "visible" }}>
+    {go && <path d="M36 140 Q50 200 64 140 Z" fill="#ff7043" />}
+    <path d="M30 60 L10 140 L32 130 Z" fill="#37474f" /><path d="M70 60 L90 140 L68 130 Z" fill="#37474f" />
+    <path d="M50 4 Q82 40 74 140 L26 140 Q18 40 50 4 Z" fill="#eceff1" stroke="#90a4ae" strokeWidth="3" />
+    <circle cx="50" cy="70" r="14" fill="#b3e5fc" stroke="#90a4ae" strokeWidth="3" />
+  </svg>
+);
+
+const TOYS: Record<ToyKey, { title: string; hint: string; done: string }> = {
+  monster: { title: "Feed the monster", hint: "Drag the picture into the monster's mouth!", done: "Yum!" },
+  dig: { title: "Treasure dig", hint: "Drag the shovel to the dirt!", done: "You found treasure!" },
+  hoop: { title: "Hoop shot", hint: "Drag the ball into the hoop!", done: "Swish!" },
+  fuel: { title: "Blast off", hint: "Drag the fuel to the rocket!", done: "Blast off!" },
+};
+const TOY_ORDER: ToyKey[] = ["monster", "dig", "hoop", "fuel"];
+
+// ── Drag-to-target toy ─────────────────────────────────────────────
+function DragToy({ toy, word, onDone }: { toy: ToyKey; word: string; onDone: () => void }) {
+  const [off, setOff] = useState({ x: 0, y: 0 });
+  const [drag, setDrag] = useState<{ sx: number; sy: number } | null>(null);
+  const [hot, setHot] = useState(false);
+  const [done, setDone] = useState(false);
+  const [nudge, setNudge] = useState(false);
+  const targetRef = useRef<HTMLDivElement>(null);
+
+  function inTarget(x: number, y: number) {
+    const r = targetRef.current?.getBoundingClientRect();
+    if (!r) return false;
+    const pad = 24;
+    return x > r.left - pad && x < r.right + pad && y > r.top - pad && y < r.bottom + pad;
+  }
+  function down(e: ReactPointerEvent<HTMLDivElement>) {
+    if (done) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDrag({ sx: e.clientX - off.x, sy: e.clientY - off.y });
+    setNudge(false);
+  }
+  function move(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!drag) return;
+    setOff({ x: e.clientX - drag.sx, y: e.clientY - drag.sy });
+    setHot(inTarget(e.clientX, e.clientY));
+  }
+  function up(e: ReactPointerEvent<HTMLDivElement>) {
+    if (!drag) return;
+    setDrag(null);
+    setHot(false);
+    const moved = Math.hypot(off.x, off.y) > 12;
+    if (inTarget(e.clientX, e.clientY)) {
+      setDone(true);
+      sfx("success");
+      window.setTimeout(onDone, 1500);
+    } else {
+      setOff({ x: 0, y: 0 });
+      if (!moved) { setNudge(true); sfx("tap"); }
+    }
   }
 
+  const item =
+    toy === "monster" ? <WordPic word={word} size={120} /> :
+    toy === "dig" ? <Shovel /> :
+    toy === "hoop" ? (
+      <div style={{ width: 120, height: 120, borderRadius: "50%", background: "#f57c00", border: "4px solid #bf360c", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+        <WordPic word={word} size={86} />
+      </div>
+    ) : <FuelCan />;
+
+  const target =
+    toy === "monster" ? <Monster chomp={done} /> :
+    toy === "dig" ? (done ? <div className="wq-reveal" style={{ position: "relative" }}><WordPic word={word} size={150} /><div style={{ position: "absolute", top: -14, right: -18 }}><Keepsake k="cave" size={54} /></div></div> : <Mound />) :
+    toy === "hoop" ? <Hoop swish={done} /> :
+    <SmallRocket go={done} />;
+
+  return (
+    <div className="wq-stage">
+      <div className="wq-target" ref={targetRef} style={{ outline: hot ? "4px dashed #27c06b" : "none" }}>{target}</div>
+      {!done && (
+        <div className={`wq-drag ${nudge ? "wq-nudge" : ""}`}
+          style={{ transform: `translate(${off.x}px, ${off.y}px)`, transition: drag ? "none" : "transform .25s", cursor: drag ? "grabbing" : "grab" }}
+          onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { setDrag(null); setOff({ x: 0, y: 0 }); }}>
+          {item}
+        </div>
+      )}
+      {done && <div className="wq-done">{TOYS[toy].done}</div>}
+      {nudge && !done && <div className="wq-hint-pop">Drag it!</div>}
+    </div>
+  );
+}
+
+const CSS = `
+.wq-page{min-height:100vh;font-family:'Nunito',system-ui,Arial,sans-serif;background:linear-gradient(180deg,#0e2a4d,#13457a 55%,#1f6fb0);color:#fff;padding:14px 14px 30px;box-sizing:border-box}
+.wq-wrap{max-width:680px;margin:0 auto}
+.wq-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.wq-chip{background:rgba(255,255,255,.14);border:none;color:#fff;font-weight:800;border-radius:12px;padding:8px 14px;cursor:pointer;font-family:inherit;font-size:15px}
+.wq-card{background:rgba(255,255,255,.97);color:#13314f;border-radius:22px;padding:16px;text-align:center;position:relative;overflow:hidden}
+.wq-map{display:flex;align-items:center;justify-content:space-between;position:relative;background:rgba(255,255,255,.08);border-radius:18px;padding:10px 12px;margin-bottom:12px}
+.wq-map-line{position:absolute;left:30px;right:30px;top:50%;height:4px;background:rgba(255,255,255,.2)}
+.wq-stop{position:relative;width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900}
+.wq-big{border:none;border-radius:16px;padding:16px 12px;font-size:19px;font-weight:900;cursor:pointer;font-family:inherit;touch-action:manipulation}
+.wq-big:active{transform:scale(.97)}
+.wq-go{background:linear-gradient(135deg,#27c06b,#1ea65a);color:#fff;width:100%}
+.wq-got{background:#27c06b;color:#fff;box-shadow:0 4px 0 #1b8a4c}
+.wq-try{background:#f5a623;color:#13314f;box-shadow:0 4px 0 #b97a12}
+.wq-word{font-size:38px;font-weight:900;margin:6px 0 0}
+.wq-power{display:flex;justify-content:center;gap:10px;margin:10px 0}
+.wq-cell{width:40px;height:40px;border-radius:50%;border:3px solid #cfd8dc;display:flex;align-items:center;justify-content:center;background:#f4f7f9}
+.wq-cell.got{background:#27c06b;border-color:#1b8a4c}
+.wq-cell.effort{background:#f5a623;border-color:#b97a12}
+.wq-cell.got::after,.wq-cell.effort::after{content:"";width:14px;height:14px;border-radius:50%;background:#fff}
+.wq-stage{position:relative;height:340px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 10px;touch-action:none;margin:8px -16px -16px;background:linear-gradient(#e3f2fd 0%,#e3f2fd 72%,#a5d6a7 72%,#81c784 100%)}
+.wq-target{align-self:flex-start;margin-left:auto;margin-right:6%;margin-top:14px;border-radius:20px;padding:4px}
+.wq-drag{position:absolute;left:14px;bottom:10px;touch-action:none;user-select:none;z-index:5}
+.wq-done{position:absolute;left:0;right:0;bottom:16px;font-size:30px;font-weight:900;color:#1b8a4c;animation:wqPop .5s ease-out}
+.wq-hint-pop{position:absolute;left:18px;bottom:130px;background:#13314f;color:#fff;border-radius:12px;padding:6px 12px;font-weight:900}
+.wq-nudge{animation:wqShake .4s ease-in-out 2}
+.wq-wiggle{animation:wqBob 2.4s ease-in-out infinite}
+.wq-chomp{animation:wqChomp .3s ease-in-out 3}
+.wq-launch{animation:wqLaunch 1.4s ease-in forwards}
+.wq-reveal{animation:wqPop .6s ease-out}
+.wq-net{animation:wqShake .3s ease-in-out 2}
+@keyframes wqBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes wqChomp{0%,100%{transform:scaleY(1)}50%{transform:scaleY(.85)}}
+@keyframes wqLaunch{0%{transform:translateY(0)}20%{transform:translateY(6px)}100%{transform:translateY(-420px)}}
+@keyframes wqPop{0%{transform:scale(.4);opacity:0}70%{transform:scale(1.15);opacity:1}100%{transform:scale(1)}}
+@keyframes wqShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.wq-paths{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.wq-path{border:none;border-radius:18px;padding:18px 10px;color:#fff;font-weight:900;font-size:18px;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:6px}
+.wq-buddies{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.wq-buddy{border-radius:14px;padding:8px 4px;cursor:pointer;font-family:inherit;font-weight:800;color:#fff;display:flex;flex-direction:column;align-items:center;gap:2px}
+.wq-chest{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;background:#fff8e1;border-radius:18px;padding:12px;margin:10px 0}
+@media (max-height:560px){.wq-stage{height:260px}.wq-word{font-size:30px}}
+@media (max-width:520px){.wq-target{transform:scale(.75);transform-origin:top right;margin-right:0}}
+`;
+
+export default function AdventureGame() {
+  const [{ sound, words }] = useState(readParams);
+  const [phase, setPhase] = useState<Phase>("intro");
+  const [buddy, setBuddy] = useState<Buddy>("Fox");
+  const [camps, setCamps] = useState<string[][]>([]);
+  const [camp, setCamp] = useState(0);
+  const [wordIdx, setWordIdx] = useState(0);
+  const [power, setPower] = useState<Try[]>([]);
+  const [secondTry, setSecondTry] = useState(false);
+  const [log, setLog] = useState<{ word: string; t: Try }[]>([]);
+  const [found, setFound] = useState<PathKey[]>([]);
+  const [pathChoice, setPathChoice] = useState<PathKey[]>(["forest", "river"]);
+  const [toyCount, setToyCount] = useState(0);
+
+  // recorder (optional: hear yourself)
+  const [isRec, setIsRec] = useState(false);
+  const [recUrl, setRecUrl] = useState<string | null>(null);
+  const recRef = useRef<MediaRecorder | null>(null);
+  const chunks = useRef<BlobPart[]>([]);
+
+  const curWord = camps[camp]?.[wordIdx] || "";
+  const soundLabel = sound ? `/${sound}/` : "";
+  const toy = TOY_ORDER[toyCount % TOY_ORDER.length];
+
+  useEffect(() => {
+    if (phase === "say" && curWord && power.length === 0 && !secondTry) speak(curWord);
+  }, [phase, curWord]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function startRec() {
-    setMicError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const r = new MediaRecorder(stream);
-      chunksRef.current = [];
-      r.ondataavailable = (e) => e.data.size > 0 && chunksRef.current.push(e.data);
+      chunks.current = [];
+      r.ondataavailable = (e) => { if (e.data.size > 0) chunks.current.push(e.data); };
       r.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        if (recordingUrl) URL.revokeObjectURL(recordingUrl);
-        setRecordingUrl(URL.createObjectURL(blob));
+        setRecUrl(URL.createObjectURL(new Blob(chunks.current, { type: "audio/webm" })));
         stream.getTracks().forEach((t) => t.stop());
       };
-      r.start(); recorderRef.current = r; setIsRecording(true);
-    } catch { setMicError("Mic is off — you can still play the toy."); }
+      r.start();
+      recRef.current = r;
+      setIsRec(true);
+    } catch { /* mic off: the game still works */ }
   }
-  function stopRec() { const r = recorderRef.current; if (r && r.state !== "inactive") r.stop(); setIsRecording(false); }
-  function playBack() { if (recordingUrl) new Audio(recordingUrl).play().catch(() => {}); }
-
-  const curWords = levels[level] || [];
-  const curWord = curWords[wordIdx] || "";
-  const totalWords = levels.reduce((n, l) => n + l.length, 0);
-  const doneWords = levels.slice(0, level).reduce((n, l) => n + l.length, 0) + wordIdx;
-  const mini = MINIS[doneWords % MINIS.length];
-
-  function advance(got: boolean) {
-    setTries((t) => t + 1);
-    if (got) setStars((s) => s + 1);
-    setRecordingUrl(null); setFx(false);
-    if (wordIdx + 1 < curWords.length) setWordIdx(wordIdx + 1);
-    else if (level + 1 < levels.length) setPhase("levelDone");
-    else setPhase("won");
+  function stopRec() {
+    const r = recRef.current;
+    if (r && r.state !== "inactive") r.stop();
+    setIsRec(false);
   }
-  function play() { // tap the toy = "got it" with a fun animation
-    if (fx) return;
-    sfx("success");
-    setFx(true);
-    window.setTimeout(() => advance(true), 1050);
+
+  function start() {
+    unlockAudio();
+    sfx("tap");
+    setCamps(buildCamps(words));
+    setCamp(0); setWordIdx(0); setPower([]); setSecondTry(false); setLog([]); setFound([]); setToyCount(0);
+    setPhase("say");
   }
-  function nextLevel() { setLevel(level + 1); setWordIdx(0); setPhase("playing"); }
 
-  useEffect(() => { if (phase === "playing" && curWord) speak(curWord); }, [curWord, phase]);
-  useEffect(() => { if (phase === "won") sfx("win"); else if (phase === "levelDone") sfx("level"); }, [phase]);
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (phase !== "playing" || fx) return;
-      if (e.key === "g" || e.key === "G" || e.key === " ") { e.preventDefault(); play(); }
-      else if (e.key === "n" || e.key === "N") advance(false);
+  function addTry(t: Try) {
+    const next = [...power, t];
+    setLog((l) => [...l, { word: curWord, t }]);
+    setPower(next);
+    setSecondTry(false);
+    setRecUrl(null);
+    if (next.length >= SAYS_PER_WORD) {
+      sfx("level");
+      window.setTimeout(() => setPhase("toy"), 500);
+    } else {
+      window.setTimeout(() => speak(curWord), 350);
     }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
+  }
+  function gotIt() { sfx("success"); addTry("got"); }
+  function tryAgain() {
+    if (!secondTry) { sfx("tap"); setSecondTry(true); speak(curWord); }
+    else { sfx("pop"); addTry("effort"); }
+  }
 
-  const comp = COMPANIONS[companion];
-  const soundLabel = `/${sound}/`;
-  const page: CSSProperties = { minHeight: "100vh", fontFamily: "'Nunito',system-ui,Arial,sans-serif", background: "linear-gradient(180deg,#0e2a4d,#13457a 55%,#1f6fb0)", color: "#fff", padding: "16px 16px 40px" };
-  const wrap: CSSProperties = { maxWidth: 720, margin: "0 auto" };
-  const card: CSSProperties = { background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.14)", borderRadius: 22, padding: 18 };
-  const bigBtn: CSSProperties = { flex: 1, border: "none", borderRadius: 16, padding: "16px 12px", fontSize: 18, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" };
-  const sparks = (
-    <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-      {["✨", "⭐", "💫", "✨", "⭐"].map((s, i) => (
-        <span key={i} style={{ position: "absolute", left: `${15 + i * 17}%`, top: "55%", fontSize: 26, animation: `wq-spark .9s ease-out ${i * 0.05}s forwards` }}>{s}</span>
-      ))}
-    </div>
-  );
+  function toyDone() {
+    setToyCount((n) => n + 1);
+    setPower([]);
+    if (wordIdx + 1 < WORDS_PER_CAMP) {
+      setWordIdx(wordIdx + 1);
+      setPhase("say");
+    } else if (camp + 1 < camps.length) {
+      const keys = shuffle(Object.keys(PATHS) as PathKey[]).slice(0, 2);
+      setPathChoice(keys);
+      sfx("level");
+      setPhase("camp");
+    } else {
+      sfx("win");
+      setPhase("won");
+    }
+  }
 
-  // Must be opened from a child's assignment card so it plays the assigned words.
-  if (!params.wordsParam.length) {
+  function choosePath(k: PathKey) {
+    sfx("success");
+    setFound((f) => [...f, k]);
+    setCamp(camp + 1);
+    setWordIdx(0);
+    setPhase("say");
+  }
+
+  if (!words.length) {
     return (
-      <div style={{ ...page, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ ...wrap, textAlign: "center" }}>
-          <div style={{ fontSize: 60 }}>🗺️</div>
-          <h1 style={{ fontSize: 24, margin: "10px 0" }}>No homework loaded</h1>
-          <p style={{ maxWidth: 340, margin: "0 auto 18px", opacity: 0.85, lineHeight: 1.5 }}>Open your child’s practice card and tap a game there — it will play the exact words their therapist assigned.</p>
-          <button onClick={() => { window.location.href = "/parent"; }} style={{ padding: "14px 28px", borderRadius: 16, border: "none", background: "linear-gradient(135deg,#27c06b,#1ea65a)", color: "white", fontSize: 16, fontWeight: 900, cursor: "pointer" }}>
-            ← Back to my child’s card
-          </button>
+      <div className="wq-page" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <style>{CSS}</style>
+        <div className="wq-wrap" style={{ textAlign: "center" }}>
+          <h1>No homework loaded</h1>
+          <p>Open your child's homework and tap Word Quest there.</p>
+          <button className="wq-big wq-go" style={{ maxWidth: 320 }} onClick={goBack}>Back to homework</button>
         </div>
       </div>
     );
   }
 
+  const map = (
+    <div className="wq-map">
+      <div className="wq-map-line" />
+      {camps.map((_, i) => (
+        <div key={i} className="wq-stop" style={{
+          background: i < camp ? "#27c06b" : i === camp ? "#f5b820" : "rgba(255,255,255,.15)",
+          border: i === camp ? "3px solid #fff" : "2px solid rgba(255,255,255,.3)",
+        }}>
+          {i === camp ? <BuddyFace who={buddy} size={38} /> : i < camp && found[i] ? <Keepsake k={found[i]} size={28} /> : i + 1}
+        </div>
+      ))}
+      <div className="wq-stop" style={{ background: "#8d6e63", border: "2px solid rgba(255,255,255,.3)", fontSize: 12 }}>END</div>
+    </div>
+  );
+
   if (phase === "intro") {
     return (
-      <div style={page}><div style={wrap}>
-        <a href="/parent" style={{ color: "#bfe0ff", fontWeight: 800, textDecoration: "none", fontSize: 14 }}>← Back</a>
-        <div style={{ textAlign: "center", marginTop: 10 }}>
-          <div style={{ fontSize: 56 }}>🗺️</div>
-          <h1 style={{ fontSize: 30, fontWeight: 900, margin: "4px 0" }}>Word Quest</h1>
-          <p style={{ color: "#cfe4ff", fontWeight: 700, maxWidth: 470, margin: "0 auto 8px" }}>
-            Every word powers a different toy — pop bubbles 🫧, feed a monster 👾, dig treasure ⛏️, launch rockets 🚀 — as your buddy travels to the treasure!
-          </p>
+      <div className="wq-page"><style>{CSS}</style><div className="wq-wrap">
+        <button className="wq-chip" onClick={goBack}>Back</button>
+        <div style={{ textAlign: "center", margin: "8px 0 12px" }}>
+          <h1 style={{ fontSize: 32, margin: "4px 0" }}>Word Quest</h1>
+          <p style={{ color: "#cfe4ff", fontWeight: 700, margin: 0 }}>Say each word 3 times to power up. Then play!</p>
+          <p style={{ color: "#cfe4ff", fontWeight: 700, margin: "4px 0 0" }}>Pick your path at every camp and find treasure.</p>
         </div>
-        <div style={{ ...card, marginBottom: 14 }}>
-          <div style={{ fontWeight: 900, marginBottom: 8 }}>Pick your buddy</div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {COMPANIONS.map((c, i) => (
-              <button key={c.name} onClick={() => setCompanion(i)} style={{ flex: "1 1 120px", border: companion === i ? "3px solid #7fd4ff" : "2px solid rgba(255,255,255,0.2)", background: companion === i ? "rgba(127,212,255,0.18)" : "rgba(255,255,255,0.06)", color: "#fff", borderRadius: 14, padding: "12px 8px", cursor: "pointer", fontFamily: "inherit", fontWeight: 800 }}>
-                <div style={{ fontSize: 34 }}>{c.emoji}</div><div style={{ fontSize: 12 }}>{c.name}</div>
-              </button>
-            ))}
-          </div>
+        <div style={{ fontWeight: 900, marginBottom: 8 }}>Pick your buddy</div>
+        <div className="wq-buddies">
+          {BUDDIES.map((b) => (
+            <button key={b} className="wq-buddy" onClick={() => { setBuddy(b); sfx("tap"); }}
+              style={{ border: buddy === b ? "3px solid #7fd4ff" : "2px solid rgba(255,255,255,.2)", background: buddy === b ? "rgba(127,212,255,.2)" : "rgba(255,255,255,.06)" }}>
+              <BuddyFace who={b} />{b}
+            </button>
+          ))}
         </div>
-        {!params.wordsParam.length && (
-          <div style={{ ...card, marginBottom: 14 }}>
-            <div style={{ fontWeight: 900, marginBottom: 8 }}>Target sound</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-              {WORD_BANK_SOUNDS.map((s) => (
-                <button key={s} onClick={() => setSound(s)} style={{ border: sound === s ? "2px solid #7fd4ff" : "1px solid rgba(255,255,255,0.2)", background: sound === s ? "rgba(127,212,255,0.2)" : "rgba(255,255,255,0.06)", color: "#fff", borderRadius: 12, padding: "8px 12px", fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>/{s}/</button>
-              ))}
-            </div>
-            <div style={{ fontWeight: 900, marginBottom: 8 }}>Position</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {["Initial", "Medial", "Final", "Mixed"].map((p) => (
-                <button key={p} onClick={() => setPos(p)} style={{ border: pos === p ? "2px solid #7fd4ff" : "1px solid rgba(255,255,255,0.2)", background: pos === p ? "rgba(127,212,255,0.2)" : "rgba(255,255,255,0.06)", color: "#fff", borderRadius: 12, padding: "8px 14px", fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{p}</button>
-              ))}
-            </div>
-          </div>
-        )}
-        <button onClick={start} style={{ ...bigBtn, width: "100%", background: "linear-gradient(135deg,#27c06b,#1ea65a)", color: "#fff", fontSize: 20, boxShadow: "0 6px 18px rgba(30,166,90,.4)" }}>🚩 Start the Quest</button>
+        <button className="wq-big wq-go" style={{ marginTop: 16 }} onClick={start}>Start the quest</button>
+        <p style={{ textAlign: "center", color: "#bfe0ff", fontSize: 14, fontWeight: 700 }}>Grown-up: after each try, tap Got it or Try again.</p>
       </div></div>
     );
   }
 
-  if (phase === "levelDone") {
-    return (<div style={page}><div style={{ ...wrap, textAlign: "center", paddingTop: 40 }}>
-      <div style={{ fontSize: 70 }}>{BADGES[level] || "🏅"}</div>
-      <h1 style={{ fontSize: 28, fontWeight: 900 }}>Camp {level + 1} cleared!</h1>
-      <p style={{ color: "#cfe4ff", fontWeight: 700 }}>Badge earned! {comp.emoji} {comp.name} climbs higher.</p>
-      <div style={{ fontSize: 22, margin: "10px 0 18px" }}>⭐ {stars} collected</div>
-      <button onClick={nextLevel} style={{ ...bigBtn, width: "100%", maxWidth: 360, background: "linear-gradient(135deg,#27c06b,#1ea65a)", color: "#fff" }}>Onward to Camp {level + 2} →</button>
-    </div></div>);
+  if (phase === "camp") {
+    return (
+      <div className="wq-page"><style>{CSS}</style><div className="wq-wrap">
+        {map}
+        <div className="wq-card">
+          <BuddyFace who={buddy} size={80} />
+          <h1 style={{ margin: "6px 0" }}>Camp {camp + 1} done!</h1>
+          <p style={{ fontWeight: 800, fontSize: 18, margin: 0 }}>Which way should {buddy} go next?</p>
+          <div className="wq-paths">
+            {pathChoice.map((k) => (
+              <button key={k} className="wq-path" style={{ background: PATHS[k].color }} onClick={() => choosePath(k)}>
+                {PATHS[k].label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div></div>
+    );
   }
 
   if (phase === "won") {
-    const accuracy = tries ? Math.round((stars / tries) * 100) : 0;
-    const medal = accuracy >= 90 ? 3 : accuracy >= 70 ? 2 : 1;
-    return (<div style={page}><div style={{ ...wrap, textAlign: "center", paddingTop: 36 }}>
-      <div style={{ fontSize: 78 }}>🏆</div>
-      <h1 style={{ fontSize: 30, fontWeight: 900 }}>Treasure found!</h1>
-      <p style={{ color: "#cfe4ff", fontWeight: 700 }}>{comp.emoji} {comp.name} reached the summit with you.</p>
-      <div style={{ fontSize: 40, margin: "8px 0" }}>{"⭐".repeat(medal)}{"☆".repeat(3 - medal)}</div>
-      <div style={{ fontWeight: 800, marginBottom: 18 }}>{stars} / {totalWords} words · {accuracy}% great sounds</div>
-      <div style={{ display: "flex", gap: 10, maxWidth: 420, margin: "0 auto" }}>
-        <button onClick={() => setPhase("intro")} style={{ ...bigBtn, background: "linear-gradient(135deg,#27c06b,#1ea65a)", color: "#fff" }}>Play again</button>
-        <a href="/parent" style={{ ...bigBtn, background: "rgba(255,255,255,0.14)", color: "#fff", textAlign: "center", textDecoration: "none", lineHeight: "26px" }}>Done</a>
-      </div>
-    </div></div>);
+    const got = log.filter((x) => x.t === "got").length;
+    const hard = Array.from(new Set(log.filter((x) => x.t === "effort").map((x) => x.word)));
+    return (
+      <div className="wq-page"><style>{CSS}</style><div className="wq-wrap">
+        <div className="wq-card wq-reveal">
+          <BuddyFace who={buddy} size={90} />
+          <h1 style={{ margin: "6px 0" }}>You reached the treasure!</h1>
+          <p style={{ fontWeight: 800, margin: 0 }}>Here's what you and {buddy} found on your trip:</p>
+          <div className="wq-chest">
+            {found.length ? found.map((k, i) => (
+              <div key={i} style={{ textAlign: "center", fontWeight: 800, fontSize: 13 }}><Keepsake k={k} size={56} /><div>{PATHS[k].find}</div></div>
+            )) : <div style={{ fontWeight: 800 }}>A big gold coin!</div>}
+          </div>
+          <p style={{ fontWeight: 800, fontSize: 18, margin: "6px 0" }}>You practiced {log.length} times. {got} sounded right.</p>
+          {hard.length > 0 && <p style={{ background: "#fff4e0", borderRadius: 12, padding: 10, margin: "8px 0" }}><b>Keep practicing:</b> {hard.join(", ")}</p>}
+          <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+            <button className="wq-big wq-go" onClick={() => setPhase("intro")}>Go on a new quest</button>
+            <button className="wq-big" style={{ background: "#e6f4f3", color: "#1f6e69" }} onClick={goBack}>Back to homework</button>
+          </div>
+        </div>
+      </div></div>
+    );
   }
 
-  // ---------- playing (mini-game per word) ----------
-  const progressPct = totalWords ? (doneWords / totalWords) * 100 : 0;
   return (
-    <div style={page}>
-      <style>{CSS}</style>
-      <div style={wrap}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <button onClick={() => setPhase("intro")} style={{ background: "rgba(255,255,255,0.12)", border: "none", color: "#fff", fontWeight: 800, borderRadius: 12, padding: "8px 14px", cursor: "pointer", fontFamily: "inherit" }}>← Exit</button>
-          <div style={{ fontWeight: 900, fontSize: 16 }}>Sound: <span style={{ color: "#7fd4ff" }}>{soundLabel}</span></div>
-          <div style={{ background: "rgba(0,0,0,0.3)", borderRadius: 14, padding: "6px 12px", fontWeight: 900 }}>⭐ {stars}</div>
-        </div>
-
-        {/* camp map */}
-        <div style={{ ...card, marginBottom: 14, padding: 14 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative" }}>
-            <div style={{ position: "absolute", left: 18, right: 18, top: 20, height: 4, background: "rgba(255,255,255,0.18)", borderRadius: 4 }} />
-            {levels.map((_, i) => {
-              const st = i < level ? "done" : i === level ? "current" : "locked";
-              return (<div key={i} style={{ position: "relative", textAlign: "center", flex: 1 }}>
-                <div style={{ width: 40, height: 40, margin: "0 auto", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 900, background: st === "done" ? "#27c06b" : st === "current" ? "#f5b820" : "rgba(255,255,255,0.12)", border: st === "current" ? "3px solid #fff" : "2px solid rgba(255,255,255,0.25)", boxShadow: st === "current" ? "0 0 14px rgba(245,184,32,.7)" : "none" }}>{st === "done" ? "✓" : st === "current" ? comp.emoji : "🔒"}</div>
-                <div style={{ fontSize: 11, fontWeight: 800, marginTop: 4, color: "#cfe4ff" }}>Camp {i + 1}</div>
-              </div>);
-            })}
-          </div>
-          <div style={{ height: 8, background: "rgba(255,255,255,0.14)", borderRadius: 6, marginTop: 10, overflow: "hidden" }}>
-            <div style={{ height: "100%", width: progressPct + "%", background: "linear-gradient(90deg,#7fd4ff,#27c06b)", transition: "width .35s" }} />
-          </div>
-        </div>
-
-        {/* mini-game scene */}
-        <div style={{ ...card, textAlign: "center", background: "rgba(255,255,255,0.96)", color: "#13314f", position: "relative", overflow: "hidden" }}>
-          <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1, textTransform: "uppercase", color: "#3b82d6" }}>
-            {mini.icon} {mini.title} · say <span style={{ color: "#163b3f" }}>{curWord}</span> with {soundLabel}
-          </div>
-
-          <div style={{ position: "relative", height: 230, display: "flex", alignItems: "center", justifyContent: "center", margin: "8px 0" }}>
-            {/* BUBBLE */}
-            {mini.key === "bubble" && (
-              <div onClick={play} style={{ cursor: fx ? "default" : "pointer", animation: fx ? "wq-pop .9s ease-out forwards" : "wq-bob 2.4s ease-in-out infinite" }}>
-                <div style={{ width: 180, height: 180, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: "radial-gradient(circle at 35% 30%, rgba(255,255,255,.95), rgba(190,225,255,.55) 55%, rgba(120,180,240,.35))", boxShadow: "inset 0 0 30px rgba(255,255,255,.7), 0 8px 24px rgba(59,130,214,.25)", border: "2px solid rgba(255,255,255,.7)" }}>
-                  <WordImage word={curWord} size={120} />
-                </div>
-              </div>
-            )}
-            {/* MONSTER */}
-            {mini.key === "monster" && (
-              <div style={{ position: "relative", textAlign: "center" }}>
-                <div style={{ animation: fx ? "wq-flydown .9s ease-in forwards" : "wq-bob 2.6s ease-in-out infinite" }}><WordImage word={curWord} size={104} /></div>
-                <div onClick={play} style={{ cursor: fx ? "default" : "pointer", fontSize: 86, marginTop: 6, animation: fx ? "wq-chomp .45s ease-in-out 2" : "wq-pulse 2s ease-in-out infinite" }}>{fx ? "😋" : "👾"}</div>
-              </div>
-            )}
-            {/* DIG */}
-            {mini.key === "dig" && (
-              <div onClick={play} style={{ cursor: fx ? "default" : "pointer", position: "relative", width: 200, height: 180 }}>
-                <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", animation: fx ? "wq-reveal .6s ease-out forwards" : "none", opacity: fx ? 1 : 0 }}><WordImage word={curWord} size={130} /></div>
-                {!fx && <div style={{ position: "absolute", inset: 0, borderRadius: 18, background: "linear-gradient(180deg,#8a5a32,#6b4423)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 60, boxShadow: "inset 0 -10px 20px rgba(0,0,0,.25)" }}>⛰️</div>}
-                {fx && <span style={{ position: "absolute", top: -6, right: 10, fontSize: 40, animation: "wq-reveal .6s ease-out" }}>💎</span>}
-              </div>
-            )}
-            {/* ROCKET */}
-            {mini.key === "rocket" && (
-              <div onClick={play} style={{ cursor: fx ? "default" : "pointer", textAlign: "center", animation: fx ? "wq-launch 1s ease-in forwards" : "wq-bob 2.6s ease-in-out infinite" }}>
-                <div style={{ width: 150, height: 150, margin: "0 auto", borderRadius: "50% 50% 45% 45%", background: "linear-gradient(180deg,#eef4ff,#cdddf2)", border: "4px solid #b3c6e0", display: "flex", alignItems: "center", justifyContent: "center" }}><WordImage word={curWord} size={104} /></div>
-                <div style={{ fontSize: 34, marginTop: -6 }}>{fx ? "🔥" : "🚀"}</div>
-              </div>
-            )}
-            {/* FISH */}
-            {mini.key === "fish" && (
-              <div onClick={play} style={{ cursor: fx ? "default" : "pointer", textAlign: "center" }}>
-                <div style={{ fontSize: 30 }}>🎣</div>
-                <div style={{ width: 2, height: 26, background: "#94a3b8", margin: "0 auto" }} />
-                <div style={{ animation: fx ? "wq-reel .9s ease-in forwards" : "wq-bob 2.4s ease-in-out infinite" }}>
-                  <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 152, height: 152, borderRadius: 22, background: "radial-gradient(circle at 40% 30%, rgba(127,212,255,.4), rgba(59,130,214,.18))", border: "2px solid rgba(127,212,255,.6)" }}><WordImage word={curWord} size={110} /></div>
-                </div>
-              </div>
-            )}
-            {/* HOOP */}
-            {mini.key === "hoop" && (
-              <div onClick={play} style={{ cursor: fx ? "default" : "pointer", position: "relative", width: 220, height: 210 }}>
-                <div style={{ position: "absolute", top: 4, left: "50%", transform: "translateX(-28px)", width: 56, height: 16, borderRadius: "50%", border: "5px solid #e8723c", boxShadow: "0 4px 8px rgba(0,0,0,.12)" }} />
-                <div style={{ position: "absolute", bottom: 6, left: "50%", transform: "translateX(-56px)", animation: fx ? "wq-hoop 1s ease-in forwards" : "wq-pulse 2s ease-in-out infinite" }}>
-                  <div style={{ width: 112, height: 112, borderRadius: "50%", overflow: "hidden", border: "3px solid #e8723c", display: "flex", alignItems: "center", justifyContent: "center", background: "#fff" }}><WordImage word={curWord} size={96} /></div>
-                </div>
-              </div>
-            )}
-            {/* BALLOON */}
-            {mini.key === "balloon" && (
-              <div onClick={play} style={{ cursor: fx ? "default" : "pointer", textAlign: "center", animation: fx ? "wq-float 1s ease-in forwards" : "wq-bob 2.6s ease-in-out infinite" }}>
-                <div style={{ width: 160, height: 174, margin: "0 auto", borderRadius: "50% 50% 48% 48%", background: "radial-gradient(circle at 38% 28%, #ffd3df, #ff7aa0 72%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 8px 22px rgba(255,122,160,.32)" }}><WordImage word={curWord} size={104} /></div>
-                <div style={{ width: 2, height: 30, background: "#cbd5e1", margin: "0 auto" }} />
-              </div>
-            )}
-            {/* PAINT */}
-            {mini.key === "paint" && (
-              <div onClick={play} style={{ cursor: fx ? "default" : "pointer", position: "relative", width: 200, height: 180 }}>
-                <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", animation: fx ? "wq-reveal .6s ease-out forwards" : "none", opacity: fx ? 1 : 0 }}><WordImage word={curWord} size={130} /></div>
-                {!fx && <div style={{ position: "absolute", inset: 0, borderRadius: 18, background: "conic-gradient(#ef4444,#f59e0b,#22c55e,#3b82f6,#a855f7,#ef4444)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 56 }}>🎨</div>}
-                {fx && <span style={{ position: "absolute", top: -6, right: 8, fontSize: 40, animation: "wq-reveal .6s ease-out" }}>🌈</span>}
-              </div>
-            )}
-            {fx && sparks}
-          </div>
-
-          <div style={{ fontSize: 40, fontWeight: 900, lineHeight: 1, textTransform: "lowercase" }}>{curWord}</div>
-          <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700, marginTop: 4 }}>Word {wordIdx + 1} of {curWords.length} · Camp {level + 1}</div>
-
-          <button onClick={() => speak(curWord)} style={{ marginTop: 8, border: "2px solid #d7e6fa", background: "#eef5ff", color: "#2f6fb0", borderRadius: 12, padding: "8px 16px", fontWeight: 800, cursor: "pointer", fontFamily: "inherit", fontSize: 14 }}>🔊 Hear it</button>
-
-          {/* mic */}
-          <div style={{ marginTop: 12 }}>
-            <button onMouseDown={startRec} onMouseUp={stopRec} onMouseLeave={() => isRecording && stopRec()} onTouchStart={(e) => { e.preventDefault(); startRec(); }} onTouchEnd={(e) => { e.preventDefault(); stopRec(); }}
-              style={{ width: 72, height: 72, borderRadius: "50%", border: "none", cursor: "pointer", background: isRecording ? "#ef4444" : "linear-gradient(135deg,#3b82d6,#2f6fb0)", color: "#fff", fontSize: 28, boxShadow: isRecording ? "0 0 0 8px rgba(239,68,68,.25)" : "0 6px 16px rgba(59,130,214,.45)" }}>🎤</button>
-            <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700, marginTop: 6 }}>{isRecording ? "Recording… let go to stop" : "Press & hold to record"}</div>
-            {recordingUrl && !isRecording && <button onClick={playBack} style={{ marginTop: 6, border: "2px solid #d7e6fa", background: "#eef5ff", color: "#2f6fb0", borderRadius: 10, padding: "6px 12px", fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>▶ Play it back</button>}
-            {micError && <div style={{ fontSize: 12, color: "#b91c1c", fontWeight: 700, marginTop: 6 }}>{micError}</div>}
-          </div>
-        </div>
-
-        {/* action buttons */}
-        <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-          <button onClick={play} disabled={fx} style={{ ...bigBtn, background: "linear-gradient(135deg,#f5b820,#e09b00)", color: "#13314f", opacity: fx ? 0.7 : 1 }}>{mini.icon} {mini.action} <span style={{ opacity: .7, fontSize: 13 }}>(G)</span></button>
-          <button onClick={() => { sfx("fail"); advance(false); }} disabled={fx} style={{ ...bigBtn, flex: "0 0 130px", background: "rgba(255,255,255,0.14)", color: "#fff", fontSize: 15 }}>Not yet ▶ <span style={{ opacity: .7, fontSize: 12 }}>(N)</span></button>
-        </div>
-        <p style={{ textAlign: "center", color: "#bfe0ff", fontSize: 12, fontWeight: 700, marginTop: 10 }}>
-          Say <b>{curWord}</b>, record &amp; play it back, then tap the {mini.icon} to {mini.verb}!
-        </p>
+    <div className="wq-page"><style>{CSS}</style><div className="wq-wrap">
+      <div className="wq-row">
+        <button className="wq-chip" onClick={goBack}>Back</button>
+        {soundLabel && <div style={{ fontWeight: 900 }}>Sound: <span style={{ color: "#7fd4ff" }}>{soundLabel}</span></div>}
+        <div style={{ fontWeight: 900 }}>Camp {camp + 1}</div>
       </div>
-    </div>
+      {map}
+      {phase === "say" ? (
+        <div className="wq-card">
+          <div style={{ fontSize: 14, fontWeight: 900, color: "#3b82d6", textTransform: "uppercase", letterSpacing: 1 }}>Say it 3 times to power up!</div>
+          <div style={{ marginTop: 8 }}><WordPic key={curWord} word={curWord} size={170} /></div>
+          <div className="wq-word">{curWord}</div>
+          <div className="wq-power">
+            {Array.from({ length: SAYS_PER_WORD }, (_, i) => <span key={i} className={`wq-cell ${power[i] || ""}`} />)}
+          </div>
+          <div style={{ color: "#c26a00", fontWeight: 800, minHeight: 22 }}>{secondTry ? "One more try!" : ""}</div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap", margin: "4px 0 10px" }}>
+            <button className="wq-chip" style={{ background: "#eef5ff", color: "#2f6fb0" }} onClick={() => speak(curWord)}>Hear it</button>
+            <button className="wq-chip" style={{ background: isRec ? "#ef4444" : "#eef5ff", color: isRec ? "#fff" : "#2f6fb0", touchAction: "none" }}
+              onPointerDown={startRec} onPointerUp={stopRec} onPointerLeave={() => isRec && stopRec()}>
+              {isRec ? "Recording... let go" : "Hold to record"}
+            </button>
+            {recUrl && !isRec && <button className="wq-chip" style={{ background: "#eef5ff", color: "#2f6fb0" }} onClick={() => new Audio(recUrl).play().catch(() => {})}>Hear yourself</button>}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <button className="wq-big wq-got" onClick={gotIt}>Got it</button>
+            <button className="wq-big wq-try" onClick={tryAgain}>Try again</button>
+          </div>
+        </div>
+      ) : (
+        <div className="wq-card">
+          <div style={{ fontSize: 22, fontWeight: 900 }}>Your turn! {TOYS[toy].title}</div>
+          <div style={{ fontWeight: 700, color: "#456" }}>{TOYS[toy].hint}</div>
+          <DragToy key={`${camp}-${wordIdx}`} toy={toy} word={curWord} onDone={toyDone} />
+        </div>
+      )}
+    </div></div>
   );
 }
